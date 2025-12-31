@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
 import { ListingCard } from "./ListingCard";
-import type { CarListing } from "../../../types/car.ts";
 
 // 1. Pass filters as a prop
 export function FeaturedListings({ filters }: { filters: any }) {
