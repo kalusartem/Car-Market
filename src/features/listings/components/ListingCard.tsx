@@ -1,14 +1,22 @@
-import { CarListing } from "../../../types/car";
+import type { CarListing } from "../../../types/car.ts";
+import { getCarImageUrl } from "../../../lib/supabase";
 
 interface ListingCardProps {
   car: CarListing;
 }
 
 export function ListingCard({ car }: ListingCardProps) {
+  // Resolve the first ID in the array to a real URL
+  const imageUrl = getCarImageUrl(car.image_ids?.[0]);
+
   return (
     <div className="group bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 hover:border-blue-500/50 transition-all duration-300 shadow-lg">
-      {/* Image Placeholder */}
       <div className="aspect-[16/9] bg-slate-700 relative overflow-hidden">
+        <img
+          src={imageUrl}
+          alt={`${car.make} ${car.model}`}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent" />
         <span className="absolute bottom-3 left-3 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">
           {car.year}
