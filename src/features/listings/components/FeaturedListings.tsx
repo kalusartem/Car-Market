@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
 import { ListingCard } from "./ListingCard";
-import { CarListing } from "../../../types/car";
+import type { CarListing } from "../../../types/car.ts";
 
 export function FeaturedListings() {
   const {
@@ -47,9 +47,12 @@ export function FeaturedListings() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {cars?.map((car) => (
-          <ListingCard key={car.id} car={car} />
-        ))}
+        {cars?.map(
+          (car) => (
+            console.log("car", car),
+            (<ListingCard key={car.id} car={car} />)
+          ),
+        )}
       </div>
     </section>
   );
