@@ -13,6 +13,12 @@ async function fetchListing(id: string) {
   return data;
 }
 
+const { data } = supabase.storage
+  .from("project-images")
+  .getPublicUrl("listings/test/1.jpg");
+
+console.log("**test: ", data.publicUrl);
+
 export function ListingDetailsPage() {
   const { id } = useParams<{ id: string }>();
 
