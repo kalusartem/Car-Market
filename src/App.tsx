@@ -4,6 +4,7 @@ import { FilterBar } from "./features/listings/components/FilterBar";
 import { FeaturedListings } from "./features/listings/components/FeaturedListings";
 import { ListingsPage } from "./features/listings/pages/ListingsPage";
 import { ListingDetailsPage } from "./features/listings/pages/ListingDetailsPage";
+import { CreateListingPage } from "./features/listings/pages/CreateListingPage";
 
 export default function App() {
   const [filters, setFilters] = useState({
@@ -28,6 +29,9 @@ export default function App() {
         >
           Browse
         </Link>
+        <Link to="/sell" className="text-sm text-slate-300 hover:text-white">
+          Sell
+        </Link>
       </nav>
 
       <Routes>
@@ -42,6 +46,7 @@ export default function App() {
         />
         <Route path="/listings" element={<ListingsPage />} />
         <Route path="/listings/:id" element={<ListingDetailsPage />} />
+        <Route path="/sell" element={<CreateListingPage />} />
       </Routes>
     </div>
   );
