@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
 import { ListingCard } from "./ListingCard";
+import { Link } from "react-router-dom";
 
 // 1. Pass filters as a prop
 export function FeaturedListings({ filters }: { filters: any }) {
@@ -54,9 +55,12 @@ export function FeaturedListings({ filters }: { filters: any }) {
           <h2 className="text-3xl font-bold text-white">Featured Inventory</h2>
           <p className="text-slate-400">Hand-picked premium vehicles</p>
         </div>
-        <button className="text-blue-400 hover:text-blue-300 font-medium">
+        <Link
+          to="/listings"
+          className="text-blue-400 hover:text-blue-300 font-medium"
+        >
           View All →
-        </button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
