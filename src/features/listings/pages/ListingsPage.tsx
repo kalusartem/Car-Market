@@ -1,7 +1,7 @@
 // src/features/listings/pages/ListingsPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
 import { FilterBar } from "../components/FilterBar";
 
@@ -50,7 +50,7 @@ async function fetchListings(args: {
   filters: Filters;
   sort: SortKey;
   page: number;
-}) {
+}): Promise<{ rows: ListingRow[]; count: number }> {
   const { filters, sort, page } = args;
 
   let q = supabase
@@ -60,19 +60,16 @@ async function fetchListings(args: {
 
   const term = filters.search.trim();
   if (term) {
-    // Adjust if you have more fields (title, description, etc.)
     q = q.or(`make.ilike.%${term}%,model.ilike.%${term}%`);
   }
 
   if (filters.make) q = q.eq("make", filters.make);
   if (filters.maxPrice) q = q.lte("price", filters.maxPrice);
 
-  // Sorting
   if (sort === "newest") q = q.order("created_at", { ascending: false });
   if (sort === "price_asc") q = q.order("price", { ascending: true });
   if (sort === "price_desc") q = q.order("price", { ascending: false });
 
-  // Pagination
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
   q = q.range(from, to);
@@ -83,10 +80,32 @@ async function fetchListings(args: {
   return { rows: (data ?? []) as ListingRow[], count: count ?? 0 };
 }
 
+async function fetchUserId(): Promise<string | null> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) return null;
+  return data?.user?.id ?? null;
+}
+
+async function fetchFavoritesForListingIds(
+  userId: string,
+  listingIds: string[],
+): Promise<Set<string>> {
+  if (!listingIds.length) return new Set();
+
+  const { data, error } = await supabase
+    .from("favorites")
+    .select("listing_id")
+    .eq("user_id", userId)
+    .in("listing_id", listingIds);
+
+  if (error) throw error;
+  return new Set((data ?? []).map((r: any) => r.listing_id as string));
+}
+
 export function ListingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const qc = useQueryClient();
 
-  // Read URL -> defaults
   const urlFilters = useMemo<Filters>(() => {
     const search = searchParams.get("q") ?? "";
     const make = searchParams.get("make") ?? "";
@@ -104,11 +123,10 @@ export function ListingsPage() {
   const [filters, setFilters] = useState<Filters>(urlFilters);
   const [sort, setSort] = useState<SortKey>(urlSort);
 
-  // Sync local state with URL changes
   useEffect(() => setFilters(urlFilters), [urlFilters]);
   useEffect(() => setSort(urlSort), [urlSort]);
 
-  // Push filters/sort -> URL, reset page
+  // Push local state -> URL, reset page
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
     next.set("page", "1");
@@ -128,15 +146,80 @@ export function ListingsPage() {
 
   const page = urlPage;
 
+  // ✅ TanStack Query v5: use placeholderData instead of keepPreviousData
   const { data, isLoading, isError, error, isFetching } = useQuery({
     queryKey: ["listings", filters, sort, page],
     queryFn: () => fetchListings({ filters, sort, page }),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev, // keeps last page while fetching new
     staleTime: 1000 * 15,
   });
 
   const total = data?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const listingIds = useMemo(() => (data?.rows ?? []).map((r) => r.id), [data]);
+
+  const { data: userId } = useQuery({
+    queryKey: ["auth-user-id"],
+    queryFn: fetchUserId,
+    staleTime: 1000 * 30,
+  });
+
+  const favKey = useMemo(
+    () => ["favorites-for-page", userId, listingIds.join("|")] as const,
+    [userId, listingIds],
+  );
+
+  const { data: favSet } = useQuery({
+    queryKey: favKey,
+    enabled: !!userId && listingIds.length > 0,
+    queryFn: () => fetchFavoritesForListingIds(userId!, listingIds),
+    staleTime: 1000 * 10,
+  });
+
+  const toggleFavorite = useMutation({
+    mutationFn: async (listingId: string) => {
+      if (!userId) throw new Error("Please log in to save favorites.");
+
+      const isFav = favSet?.has(listingId) ?? false;
+
+      if (isFav) {
+        const { error } = await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", userId)
+          .eq("listing_id", listingId);
+
+        if (error) throw error;
+        return { listingId, next: false };
+      } else {
+        const { error } = await supabase
+          .from("favorites")
+          .insert({ user_id: userId, listing_id: listingId });
+
+        if (error) throw error;
+        return { listingId, next: true };
+      }
+    },
+    onMutate: async (listingId) => {
+      await qc.cancelQueries({ queryKey: favKey });
+
+      const prev = qc.getQueryData<Set<string>>(favKey);
+      const next = new Set<string>(prev ?? favSet ?? new Set());
+
+      if (next.has(listingId)) next.delete(listingId);
+      else next.add(listingId);
+
+      qc.setQueryData(favKey, next);
+      return { prev };
+    },
+    onError: (_err, _listingId, ctx) => {
+      if (ctx?.prev) qc.setQueryData(favKey, ctx.prev);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["favorites"] });
+    },
+  });
 
   const goToPage = (p: number) => {
     const next = new URLSearchParams(searchParams);
@@ -151,7 +234,7 @@ export function ListingsPage() {
           <div>
             <h1 className="text-2xl font-semibold">Browse Listings</h1>
             <p className="text-slate-400 text-sm mt-1">
-              Filter, sort, and share your search.
+              Filter, sort, and save your favorites.
             </p>
           </div>
 
@@ -161,6 +244,13 @@ export function ListingsPage() {
               className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
             >
               Sell
+            </Link>
+
+            <Link
+              to="/favorites"
+              className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
+            >
+              Saved
             </Link>
 
             <div className="flex items-center gap-2">
@@ -221,21 +311,47 @@ export function ListingsPage() {
               </div>
             ) : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(data?.rows ?? []).map((row) => {
+                {(data?.rows ?? []).map((row: ListingRow) => {
                   const images = (row.listing_images ?? [])
                     .slice()
-                    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+                    .sort(
+                      (a: ListingImage, b: ListingImage) =>
+                        (a.position ?? 0) - (b.position ?? 0),
+                    );
+
                   const cover = images[0];
                   const coverUrl = cover
                     ? publicUrl(cover.bucket, cover.path)
                     : null;
 
+                  const isFav = !!userId && (favSet?.has(row.id) ?? false);
+
                   return (
                     <Link
                       key={row.id}
                       to={`/listings/${row.id}`}
-                      className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 hover:border-slate-700 transition"
+                      className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 hover:border-slate-700 transition relative"
                     >
+                      <button
+                        type="button"
+                        className="absolute top-3 right-3 z-10 rounded-full bg-black/50 hover:bg-black/70 px-3 py-2 text-sm disabled:opacity-50"
+                        title={
+                          userId
+                            ? isFav
+                              ? "Unsave"
+                              : "Save"
+                            : "Log in to save"
+                        }
+                        disabled={!userId || toggleFavorite.isPending}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleFavorite.mutate(row.id);
+                        }}
+                      >
+                        {isFav ? "❤️" : "🤍"}
+                      </button>
+
                       {coverUrl ? (
                         <img
                           src={coverUrl}
@@ -269,7 +385,6 @@ export function ListingsPage() {
               </div>
             )}
 
-            {/* Pagination */}
             <div className="flex items-center justify-between mt-8">
               <button
                 className="px-4 py-2 rounded-lg bg-slate-800 disabled:opacity-50"

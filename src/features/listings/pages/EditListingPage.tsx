@@ -1,7 +1,8 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
-import { ListingForm, ListingRow } from "../components/ListingForm";
+import { ListingForm } from "../components/ListingForm";
+import type { ListingRow } from "../components/ListingForm";
 
 async function fetchListing(id: string) {
   const { data, error } = await supabase
