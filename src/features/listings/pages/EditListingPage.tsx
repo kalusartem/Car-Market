@@ -180,7 +180,6 @@ export function EditListingPage() {
         mode="edit"
         listingId={id}
         initial={listing}
-        showImages
         onSaved={() => {
           // optional: toast later
         }}
