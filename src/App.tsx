@@ -7,6 +7,8 @@ import { ListingDetailsPage } from "./features/listings/pages/ListingDetailsPage
 import { CreateListingPage } from "./features/listings/pages/CreateListingPage";
 import { EditListingPage } from "./features/listings/pages/EditListingPage";
 import { FavoritesPage } from "./features/favorites/pages/FavoritesPage";
+import { AccountMenu } from "./components/AccountMenu";
+import { AccountPage } from "./features/account/pages/AccountPage";
 
 export default function App() {
   const [filters, setFilters] = useState({
@@ -40,6 +42,7 @@ export default function App() {
           >
             Favorites
           </Link>
+          <AccountMenu />
         </div>
       </nav>
 
@@ -58,6 +61,7 @@ export default function App() {
         <Route path="/sell" element={<CreateListingPage />} />
         <Route path="/listings/:id/edit" element={<EditListingPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
+        <Route path="/account" element={<AccountPage />} />
       </Routes>
     </div>
   );
