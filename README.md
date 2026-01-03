@@ -1,73 +1,146 @@
-# React + TypeScript + Vite
+# Car Market — Full-Stack Marketplace
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A production-style car marketplace built with **React, Supabase, and PostgreSQL**, focused on real-world data modeling, UX patterns, and full-stack ownership.
 
-Currently, two official plugins are available:
+This project intentionally goes beyond CRUD to demonstrate **senior-level decision making** around architecture, performance, and user experience.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## ✨ Key Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Browse listings with **filtering, sorting, pagination, and URL sync**
+- Listing details with **image gallery + cover photo**
+- Seller flow: **create → edit → upload images**
+- **Multi-image upload** with Supabase Storage
+- **Reorder images & set cover photo**
+- **Optimistic UI** for image actions and favorites
+- **Favorites (saved cars)** per user
+- Auth-aware permissions (seller vs viewer)
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 🧱 Architecture Overview
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+┌──────────────┐
+│   Frontend   │
+│  (React +    │
+│ React Query) │
+└──────┬───────┘
+       │
+       │ REST / PostgREST
+       │
+┌──────▼──────────┐
+│   Supabase API  │
+│  (PostgreSQL)  │
+└──────┬──────────┘
+       │
+       │ File refs (bucket + path)
+       │
+┌──────▼──────────┐
+│ Supabase Storage│
+│  (Images only)  │
+└─────────────────┘
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 🗄️ Database Schema (Simplified)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### `listings`
+Core marketplace entity.
+
+```sql
+listings (
+  id uuid PK,
+  seller_id uuid,
+  make text,
+  model text,
+  year int,
+  price numeric,
+  mileage int,
+  description text,
+  is_active boolean,
+  created_at timestamptz
+)
 ```
+
+---
+
+### `listing_images`
+Normalized image storage with explicit ordering.
+
+```sql
+listing_images (
+  id uuid PK,
+  listing_id uuid FK → listings.id,
+  bucket text,
+  path text,
+  position int,
+  created_at timestamptz,
+  UNIQUE (listing_id, position)
+)
+```
+
+---
+
+### `favorites`
+User → listing relationship.
+
+```sql
+favorites (
+  id uuid PK,
+  user_id uuid,
+  listing_id uuid,
+  created_at timestamptz,
+  UNIQUE (user_id, listing_id)
+)
+```
+
+---
+
+## ⚖️ Trade-offs & Design Decisions
+
+### Why a separate `listing_images` table?
+- Enables reordering and cover selection
+- Avoids rewriting arrays
+- Scales like real marketplaces
+
+### Why `position` instead of `is_cover`?
+- Single source of truth
+- No conflicting flags
+- Reorder = cover change
+
+### Why Optimistic UI?
+- Instant UX
+- Matches modern apps
+- Shows async state mastery
+
+### Why not store image URLs?
+- URLs can change
+- Paths are stable identifiers
+- Storage concerns stay out of DB
+
+---
+
+## 🚀 What This Project Demonstrates
+
+- Full-stack ownership
+- Production-grade data modeling
+- Thoughtful trade-offs
+- Senior-level UX patterns
+
+---
+
+## 🛠️ Tech Stack
+
+- React, TypeScript
+- React Query
+- Supabase (Postgres, Auth, Storage)
+- Tailwind CSS
+
+---
+
+## 👤 Author
+
+Built by **Artem Kalus**
