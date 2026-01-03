@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
+import { fetchAuthUser } from "../lib/auth";
 
 async function fetchUser() {
   const { data, error } = await supabase.auth.getUser();
@@ -17,7 +18,7 @@ export function AccountMenu() {
 
   const { data: user } = useQuery({
     queryKey: ["auth-user"],
-    queryFn: fetchUser,
+    queryFn: fetchAuthUser,
     staleTime: 1000 * 30,
   });
 

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "../../../lib/supabase";
+import { fetchAuthUser } from "../../../lib/auth";
 
 type Listing = {
   id: string;
@@ -22,24 +23,40 @@ function formatPrice(n: number) {
 }
 
 export function MyListingsPage() {
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["my-listings"],
-    queryFn: async () => {
-      const { data: userRes, error: userErr } = await supabase.auth.getUser();
-      if (userErr) throw userErr;
-      const uid = userRes.user?.id;
-      if (!uid) throw new Error("You must be logged in.");
+  const { data: user, isLoading: authLoading } = useQuery({
+    queryKey: ["auth-user"],
+    queryFn: fetchAuthUser,
+    staleTime: 1000 * 30,
+  });
 
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["my-listings", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("listings")
         .select("id, make, model, year, price, mileage, is_active, created_at")
-        .eq("seller_id", uid)
+        .eq("seller_id", user!.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return (data ?? []) as Listing[];
     },
   });
+
+  if (authLoading) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-8 text-slate-400">Loading…</div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-8 text-slate-300">
+        You must be logged in to view your listings.
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">

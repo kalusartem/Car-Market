@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
 import { ListingForm } from "../components/ListingForm";
 import type { ListingRow } from "../components/ListingForm";
+import { fetchAuthUser } from "../../../lib/auth";
 
 async function fetchListing(id: string) {
   const { data, error } = await supabase
@@ -21,17 +22,17 @@ export function EditListingPage() {
 
   // 1) Load auth user FIRST and wait for it
   const {
-    data: userRes,
+    data: user,
     isLoading: isAuthLoading,
     isError: isAuthError,
     error: authError,
   } = useQuery({
     queryKey: ["auth-user"],
-    queryFn: async () => supabase.auth.getUser(),
+    queryFn: fetchAuthUser,
     staleTime: 1000 * 30,
   });
 
-  const userId = userRes?.data?.user?.id ?? null;
+  const userId = user?.id ?? null;
 
   // 2) Then load the listing (only after we have a user)
   const {
