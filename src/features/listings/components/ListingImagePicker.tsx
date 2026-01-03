@@ -52,7 +52,7 @@ export function ListingImagePicker({ files, onChange }: Props) {
           Add images
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             multiple
             className="hidden"
             onChange={(e) => onPick(e.target.files)}
