@@ -4,12 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { fetchAuthUser } from "../lib/auth";
 
-async function fetchUser() {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
-  return data.user ?? null;
-}
-
 export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -76,7 +70,29 @@ export function AccountMenu() {
                 className="block px-3 py-2 text-sm hover:bg-slate-900"
                 onClick={() => setOpen(false)}
               >
-                My account
+                My Account
+              </Link>
+
+              <Link
+                to="/sell"
+                className="block px-3 py-2 text-sm hover:bg-slate-900"
+                onClick={() => setOpen(false)}
+              >
+                Sell
+              </Link>
+              <Link
+                to="/favorites"
+                className="block px-3 py-2 text-sm hover:bg-slate-900"
+                onClick={() => setOpen(false)}
+              >
+                Favorites
+              </Link>
+              <Link
+                to="/account/listings"
+                className="block px-3 py-2 text-sm hover:bg-slate-900"
+                onClick={() => setOpen(false)}
+              >
+                My Listings
               </Link>
 
               <button

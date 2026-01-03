@@ -34,18 +34,6 @@ export default function App() {
           >
             Browse
           </Link>
-          <Link to="/sell" className="text-sm text-slate-300 hover:text-white">
-            Sell
-          </Link>
-          <Link
-            to="/favorites"
-            className="text-sm text-slate-300 hover:text-white"
-          >
-            Favorites
-          </Link>
-          <Link to="/account/listings" className="...">
-            My Listings
-          </Link>
           <AccountMenu />
         </div>
       </nav>
