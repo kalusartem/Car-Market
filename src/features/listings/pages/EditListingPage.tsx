@@ -19,42 +19,57 @@ export function EditListingPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["listing-edit", id],
-    queryFn: () => fetchListing(id!),
-    enabled: !!id,
-  });
-
-  // Optional: ownership guard (recommended)
-  const { data: userRes } = useQuery({
+  // 1) Load auth user FIRST and wait for it
+  const {
+    data: userRes,
+    isLoading: isAuthLoading,
+    isError: isAuthError,
+    error: authError,
+  } = useQuery({
     queryKey: ["auth-user"],
     queryFn: async () => supabase.auth.getUser(),
     staleTime: 1000 * 30,
   });
 
-  const userId = userRes?.data?.user?.id;
+  const userId = userRes?.data?.user?.id ?? null;
+
+  // 2) Then load the listing (only after we have a user)
+  const {
+    data: listing,
+    isLoading: isListingLoading,
+    isError: isListingError,
+    error: listingError,
+  } = useQuery({
+    queryKey: ["listing-edit", id],
+    queryFn: () => fetchListing(id!),
+    enabled: !!id && !!userId,
+  });
 
   if (!id) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-6">
-        Missing listing id.
+        <div className="text-red-300">Missing listing id.</div>
+        <Link to="/listings" className="text-blue-400 hover:underline">
+          Back to listings
+        </Link>
       </div>
     );
   }
 
-  if (isLoading) {
+  // Auth loading / error states
+  if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-6">
-        Loading listing…
+        Loading session…
       </div>
     );
   }
 
-  if (isError) {
+  if (isAuthError) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-6">
         <div className="text-red-300">
-          Failed to load listing: {(error as any)?.message ?? "Unknown error"}
+          Auth error: {(authError as any)?.message ?? "Unknown error"}
         </div>
         <Link to="/listings" className="text-blue-400 hover:underline">
           Back to listings
@@ -63,9 +78,7 @@ export function EditListingPage() {
     );
   }
 
-  const listing = data!;
-
-  // If you want to require login to edit:
+  // Require login for edit page
   if (!userId) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-6">
@@ -79,7 +92,41 @@ export function EditListingPage() {
     );
   }
 
-  // Ownership check
+  // Listing loading / error states
+  if (isListingLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white p-6">
+        Loading listing…
+      </div>
+    );
+  }
+
+  if (isListingError) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white p-6">
+        <div className="text-red-300">
+          Failed to load listing:{" "}
+          {(listingError as any)?.message ?? "Unknown error"}
+        </div>
+        <Link to="/listings" className="text-blue-400 hover:underline">
+          Back to listings
+        </Link>
+      </div>
+    );
+  }
+
+  if (!listing) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white p-6">
+        <div className="text-red-300">Listing not found.</div>
+        <Link to="/listings" className="text-blue-400 hover:underline">
+          Back to listings
+        </Link>
+      </div>
+    );
+  }
+
+  // Ownership guard
   if (listing.seller_id !== userId) {
     return (
       <div className="min-h-screen bg-slate-950 text-white p-6">
@@ -95,7 +142,7 @@ export function EditListingPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <div className="max-w-4xl mx-auto px-6 pt-8 flex items-center justify-between gap-4 flex-wrap">
+      <div className="max-w-4xl mx-auto px-6 pt-8">
         <Link
           to={`/listings/${id}`}
           className="text-slate-300 hover:text-white"
@@ -104,7 +151,7 @@ export function EditListingPage() {
         </Link>
 
         <button
-          className="text-sm text-slate-300 hover:text-white"
+          className="ml-4 text-sm text-slate-300 hover:text-white"
           onClick={() => navigate("/listings")}
         >
           Browse
