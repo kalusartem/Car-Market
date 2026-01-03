@@ -9,6 +9,7 @@ import { EditListingPage } from "./features/listings/pages/EditListingPage";
 import { FavoritesPage } from "./features/favorites/pages/FavoritesPage";
 import { AccountMenu } from "./components/AccountMenu";
 import { AccountPage } from "./features/account/pages/AccountPage";
+import { MyListingsPage } from "./features/account/pages/MyListingsPage";
 
 export default function App() {
   const [filters, setFilters] = useState({
@@ -42,6 +43,9 @@ export default function App() {
           >
             Favorites
           </Link>
+          <Link to="/account/listings" className="...">
+            My Listings
+          </Link>
           <AccountMenu />
         </div>
       </nav>
@@ -62,6 +66,7 @@ export default function App() {
         <Route path="/listings/:id/edit" element={<EditListingPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/account" element={<AccountPage />} />
+        <Route path="/account/listings" element={<MyListingsPage />} />
       </Routes>
     </div>
   );
