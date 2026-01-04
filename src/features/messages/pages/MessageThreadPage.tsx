@@ -156,14 +156,9 @@ export function MessageThreadPage() {
           ) : (
             <div className="flex flex-col gap-2">
               {messages!.map((m) => {
-                const mine =
-                  m.buyer_id === userId ? true : m.seller_id === userId;
-                // Determine sender by matching auth uid to buyer/seller
-                const isMine =
-                  (m.buyer_id === userId && buyerId === userId) ||
-                  m.seller_id === userId;
+                const isMine = userId === m.buyer_id ? true : userId === m.seller_id;
 
-                return (
+return (
                   <div
                     key={m.id}
                     className={`max-w-[80%] rounded-2xl px-4 py-3 border ${
