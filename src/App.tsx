@@ -1,4 +1,4 @@
-import { Routes, Route, Link } from "react-router-dom";
+import { Routes, Route, Link, Navigate } from "react-router-dom";
 import { useState } from "react";
 import { FilterBar } from "./features/listings/components/FilterBar";
 import { FeaturedListings } from "./features/listings/components/FeaturedListings";
@@ -59,7 +59,7 @@ export default function App() {
         <Route path="/sell" element={<CreateListingPage />} />
         <Route path="/listings/:id/edit" element={<EditListingPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
-        <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/inbox" element={<Navigate to="/messages" replace />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="/account/listings" element={<MyListingsPage />} />
         <Route path="/messages" element={<InboxPage />} />
