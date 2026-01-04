@@ -88,6 +88,13 @@ export function AccountMenu() {
                 Favorites
               </Link>
               <Link
+                to="/inbox"
+                className="block px-3 py-2 text-sm hover:bg-slate-900"
+                onClick={() => setOpen(false)}
+              >
+                Inbox
+              </Link>
+              <Link
                 to="/account/listings"
                 className="block px-3 py-2 text-sm hover:bg-slate-900"
                 onClick={() => setOpen(false)}

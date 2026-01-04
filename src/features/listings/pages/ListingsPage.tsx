@@ -95,12 +95,11 @@ async function fetchListings(args: {
 
         const { data, error } = await supabase
           .from("listings")
-          .select("*, listing_images(bucket, path, position)", {
-            count: "exact",
-          })
+          .select("*, listing_images(bucket, path, position)", { count: "exact" })
           .in("id", ids);
         if (error) throw error;
 
+        // Keep the rows in the same order as the RPC returned.
         const order = new Map<string, number>(
           ids.map((id: string, idx: number): [string, number] => [id, idx]),
         );
@@ -224,14 +223,7 @@ export function ListingsPage() {
 
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    filters.search,
-    filters.make,
-    filters.zip,
-    filters.radiusMiles,
-    filters.maxPrice,
-    sort,
-  ]);
+  }, [filters.search, filters.make, filters.zip, filters.radiusMiles, filters.maxPrice, sort]);
 
   const page = urlPage;
 
