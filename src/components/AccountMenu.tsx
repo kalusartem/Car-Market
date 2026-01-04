@@ -66,6 +66,14 @@ export function AccountMenu() {
               </div>
 
               <Link
+                to="/messages"
+                className="block px-3 py-2 text-sm hover:bg-slate-900"
+                onClick={() => setOpen(false)}
+              >
+                Messages
+              </Link>
+
+              <Link
                 to="/account"
                 className="block px-3 py-2 text-sm hover:bg-slate-900"
                 onClick={() => setOpen(false)}
