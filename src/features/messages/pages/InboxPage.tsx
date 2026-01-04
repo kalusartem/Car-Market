@@ -26,7 +26,7 @@ type Thread = {
   seller_id: string;
   last_message: string;
   last_at: string;
-  listing: InquiryRow["listings"];
+  listing: ListingMini | null;
 };
 
 export function InboxPage() {
@@ -98,7 +98,7 @@ export function InboxPage() {
         seller_id: msg.seller_id,
         last_message: msg.message,
         last_at: msg.created_at,
-        listing: (msg.listings?.[0] ?? null),
+        listing: (msg.listings && msg.listings.length > 0 ? msg.listings[0] : null),
       });
     }
   }
