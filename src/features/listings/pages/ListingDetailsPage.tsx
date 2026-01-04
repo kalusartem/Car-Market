@@ -59,10 +59,12 @@ export function ListingDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
 
+  const listingId = id ?? null;
+
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["listing", id],
-    queryFn: () => fetchListing(id!),
-    enabled: !!id,
+    queryKey: ["listing", listingId],
+    queryFn: () => fetchListing(listingId!),
+    enabled: !!listingId,
   });
 
   const { data: userId } = useQuery({
@@ -74,6 +76,61 @@ export function ListingDetailsPage() {
     },
     staleTime: 1000 * 30,
   });
+
+  const { data: isAdmin } = useQuery({
+    queryKey: ["is-admin", userId],
+    queryFn: () => fetchIsAdmin(userId ?? null),
+    enabled: !!userId,
+    staleTime: 1000 * 60,
+  });
+
+  const { data: isFav } = useQuery({
+    queryKey: ["favorite", userId, listingId],
+    enabled: !!userId && !!listingId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("favorites")
+        .select("id")
+        .eq("user_id", userId!)
+        .eq("listing_id", listingId!)
+        .maybeSingle();
+      if (error) throw error;
+      return !!data?.id;
+    },
+    staleTime: 1000 * 10,
+  });
+
+  // ✅ IMPORTANT: this hook must be above any early returns
+  const toggleFavorite = useMutation({
+    mutationFn: async () => {
+      if (!userId) throw new Error("Please log in to save favorites.");
+      if (!listingId) throw new Error("Missing listing id.");
+
+      if (isFav) {
+        const { error } = await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", userId)
+          .eq("listing_id", listingId);
+        if (error) throw error;
+        return false;
+      }
+
+      const { error } = await supabase
+        .from("favorites")
+        .insert({ user_id: userId, listing_id: listingId });
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["favorite", userId, listingId] });
+      await qc.invalidateQueries({ queryKey: ["favorites"] });
+    },
+  });
+
+  // -------------------------
+  // now your early returns
+  // -------------------------
 
   if (!id) {
     return (
@@ -115,53 +172,6 @@ export function ListingDetailsPage() {
       </div>
     );
   }
-
-  const { data: isAdmin } = useQuery({
-    queryKey: ["is-admin", userId],
-    queryFn: () => fetchIsAdmin(userId ?? null),
-    enabled: !!userId,
-    staleTime: 1000 * 60,
-  });
-
-  const { data: isFav } = useQuery({
-    queryKey: ["favorite", userId, row.id],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("favorites")
-        .select("id")
-        .eq("user_id", userId!)
-        .eq("listing_id", row.id)
-        .maybeSingle();
-      if (error) throw error;
-      return !!data?.id;
-    },
-    staleTime: 1000 * 10,
-  });
-
-  const toggleFavorite = useMutation({
-    mutationFn: async () => {
-      if (!userId) throw new Error("Please log in to save favorites.");
-      if (isFav) {
-        const { error } = await supabase
-          .from("favorites")
-          .delete()
-          .eq("user_id", userId)
-          .eq("listing_id", row.id);
-        if (error) throw error;
-        return false;
-      }
-      const { error } = await supabase
-        .from("favorites")
-        .insert({ user_id: userId, listing_id: row.id });
-      if (error) throw error;
-      return true;
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["favorite", userId, row.id] });
-      await qc.invalidateQueries({ queryKey: ["favorites"] });
-    },
-  });
 
   const canEdit = !!userId && (userId === row.seller_id || !!isAdmin);
 
