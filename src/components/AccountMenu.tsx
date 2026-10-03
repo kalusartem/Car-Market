@@ -25,10 +25,11 @@ export function AccountMenu() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const signInGithub = async () => {
+  // Same-email identities (GitHub/Google) are linked to one user by Supabase.
+  const signInWith = async (provider: "github" | "google") => {
     // Redirect back to your site root after OAuth
     await supabase.auth.signInWithOAuth({
-      provider: "github",
+      provider,
       options: { redirectTo: window.location.origin },
     });
   };
@@ -122,7 +123,15 @@ export function AccountMenu() {
               <button
                 type="button"
                 className="w-full text-left px-3 py-2 text-sm hover:bg-slate-900"
-                onClick={signInGithub}
+                onClick={() => signInWith("google")}
+              >
+                Sign in with Google
+              </button>
+
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-900"
+                onClick={() => signInWith("github")}
               >
                 Sign in with GitHub
               </button>
