@@ -5,16 +5,16 @@ export function CreateListingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-bg text-fg">
       <div className="max-w-4xl mx-auto px-6 pt-8">
-        <Link to="/listings" className="text-slate-300 hover:text-white">
+        <Link to="/listings" className="text-muted hover:text-fg">
           ← Back to listings
         </Link>
       </div>
 
       <ListingForm
         mode="create"
-        onCreated={(id) => navigate(`/listings/${id}/edit`)}
+        onCreated={(id) => navigate(`/listings/${id}`)}
       />
     </div>
   );

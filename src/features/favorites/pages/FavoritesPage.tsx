@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "../../../lib/supabase";
+import { errorMessage } from "../../../lib/errors";
 
 type ListingImage = {
   bucket: string;
@@ -80,34 +81,34 @@ export function FavoritesPage() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-bg text-fg">
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold">Saved Cars</h1>
-            <p className="text-slate-400 text-sm mt-1">
+            <p className="text-subtle text-sm mt-1">
               Your favorite listings in one place.
             </p>
           </div>
 
           <Link
             to="/listings"
-            className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
+            className="px-3 py-2 rounded-lg bg-surface-2 hover:bg-surface-3 text-sm"
           >
             Browse
           </Link>
         </div>
 
         {isLoading ? (
-          <div className="mt-6 text-slate-300">Loading favorites…</div>
+          <div className="mt-6 text-muted">Loading favorites…</div>
         ) : isError ? (
-          <div className="mt-6 text-red-300">
-            {(error as any)?.message ?? "Failed to load favorites."}
+          <div className="mt-6 text-danger">
+            {errorMessage(error, "Failed to load favorites.")}
           </div>
         ) : (data?.length ?? 0) === 0 ? (
-          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-8 text-slate-300">
+          <div className="mt-6 rounded-2xl border border-line bg-surface p-8 text-muted">
             No favorites yet. Go to{" "}
-            <Link to="/listings" className="text-blue-400 hover:underline">
+            <Link to="/listings" className="text-link hover:underline">
               Browse
             </Link>{" "}
             and tap the heart to save cars.
@@ -128,17 +129,17 @@ export function FavoritesPage() {
                 <Link
                   key={fav.id}
                   to={`/listings/${row.id}`}
-                  className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 hover:border-slate-700 transition"
+                  className="rounded-2xl border border-line bg-surface p-4 hover:border-line-strong transition"
                 >
                   {coverUrl ? (
                     <img
                       src={coverUrl}
                       alt={`${row.make} ${row.model}`}
-                      className="w-full h-40 object-cover rounded-xl border border-slate-800 mb-3"
+                      className="w-full h-40 object-cover rounded-xl border border-line mb-3"
                       loading="lazy"
                     />
                   ) : (
-                    <div className="w-full h-40 rounded-xl border border-slate-800 bg-slate-950/40 mb-3 flex items-center justify-center text-slate-500">
+                    <div className="w-full h-40 rounded-xl border border-line bg-surface-2 mb-3 flex items-center justify-center text-subtle">
                       No image
                     </div>
                   )}
@@ -147,11 +148,11 @@ export function FavoritesPage() {
                     {row.make} {row.model}
                   </div>
 
-                  <div className="text-slate-300 mt-1">
+                  <div className="text-muted mt-1">
                     ${Number(row.price).toLocaleString()}
                   </div>
 
-                  <div className="text-xs text-slate-400 mt-2">
+                  <div className="text-xs text-subtle mt-2">
                     {row.year ?? "—"} •{" "}
                     {typeof row.mileage === "number"
                       ? `${row.mileage.toLocaleString()} mi`

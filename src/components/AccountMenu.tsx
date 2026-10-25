@@ -1,146 +1,82 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
-import { fetchAuthUser } from "../lib/auth";
+import { useAuthUser } from "../lib/auth";
+import { UserIcon } from "./icons";
+
+const ITEMS: Array<[string, string]> = [
+  ["/favorites", "Saved cars"],
+  ["/messages", "Messages"],
+  ["/account/listings", "My listings"],
+  ["/account", "Account & security"],
+];
 
 export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
-
-  const { data: user } = useQuery({
-    queryKey: ["auth-user"],
-    queryFn: fetchAuthUser,
-    staleTime: 1000 * 30,
-  });
+  const { data: user } = useAuthUser();
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target as Node)) setOpen(false);
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
-  // Same-email identities (GitHub/Google) are linked to one user by Supabase.
-  const signInWith = async (provider: "github" | "google") => {
-    // Redirect back to your site root after OAuth
-    await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: window.location.origin },
-    });
-  };
+  if (!user) {
+    return (
+      <Link to="/login" className="btn-secondary h-10">
+        Sign in
+      </Link>
+    );
+  }
+
+  const label = user.email ?? user.user_metadata?.user_name ?? "Account";
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    await qc.invalidateQueries({ queryKey: ["auth-user"] });
-    await qc.invalidateQueries({ queryKey: ["auth-user-id"] });
-    await qc.invalidateQueries({ queryKey: ["favorites"] });
+    await qc.invalidateQueries();
     setOpen(false);
     navigate("/");
   };
-
-  const label = user?.email ?? user?.user_metadata?.user_name ?? "Account";
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
-        className="w-10 h-10 rounded-full border border-slate-800 bg-slate-900/40 hover:bg-slate-800 flex items-center justify-center"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-line-strong bg-surface text-muted transition hover:bg-surface-2 hover:text-fg"
         onClick={() => setOpen((v) => !v)}
         aria-label="Account menu"
-        title={user ? label : "Sign in"}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={label}
       >
-        {/* simple user icon */}
-        <span className="text-lg">👤</span>
+        <UserIcon />
       </button>
 
       {open ? (
-        <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-800 bg-slate-950 shadow-lg overflow-hidden z-[60]">
-          {user ? (
-            <>
-              <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-800">
-                Signed in as <span className="text-slate-200">{label}</span>
-              </div>
-
-              <Link
-                to="/favorites"
-                className="block px-3 py-2 text-sm hover:bg-slate-900"
-                onClick={() => setOpen(false)}
-              >
-                Favorites
-              </Link>
-
-              <Link
-                to="/messages"
-                className="block px-3 py-2 text-sm hover:bg-slate-900"
-                onClick={() => setOpen(false)}
-              >
-                Messages
-              </Link>
-
-              <Link
-                to="/account"
-                className="block px-3 py-2 text-sm hover:bg-slate-900"
-                onClick={() => setOpen(false)}
-              >
-                My Account
-              </Link>
-
-              <Link
-                to="/account/listings"
-                className="block px-3 py-2 text-sm hover:bg-slate-900"
-                onClick={() => setOpen(false)}
-              >
-                My Listings
-              </Link>
-
-              <Link
-                to="/sell"
-                className="block px-3 py-2 text-sm hover:bg-slate-900"
-                onClick={() => setOpen(false)}
-              >
-                Sell
-              </Link>
-
-              <button
-                type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-900 text-red-300"
-                onClick={signOut}
-              >
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="px-3 py-2 text-xs text-slate-400 border-b border-slate-800">
-                You are not signed in
-              </div>
-
-              <button
-                type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-900"
-                onClick={() => signInWith("google")}
-              >
-                Sign in with Google
-              </button>
-
-              <button
-                type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-900"
-                onClick={() => signInWith("github")}
-              >
-                Sign in with GitHub
-              </button>
-
-              <div className="px-3 py-2 text-xs text-slate-500">
-                No password needed.
-              </div>
-            </>
-          )}
+        <div role="menu" className="absolute right-0 z-[60] mt-2 w-60 overflow-hidden rounded-xl border border-line bg-surface shadow-pop">
+          <div className="border-b border-line px-3 py-2 text-xs text-subtle">
+            Signed in as <span className="block truncate font-medium text-fg">{label}</span>
+          </div>
+          {ITEMS.map(([to, text]) => (
+            <Link key={to} role="menuitem" to={to} className="block px-3 py-2 text-sm hover:bg-surface-2" onClick={() => setOpen(false)}>
+              {text}
+            </Link>
+          ))}
+          <button type="button" role="menuitem" className="w-full border-t border-line px-3 py-2 text-left text-sm text-danger hover:bg-surface-2" onClick={signOut}>
+            Sign out
+          </button>
         </div>
       ) : null}
     </div>

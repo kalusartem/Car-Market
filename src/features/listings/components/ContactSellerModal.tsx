@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "../../../lib/supabase";
+import { errorMessage } from "../../../lib/errors";
 
 type Props = {
   open: boolean;
@@ -51,8 +52,8 @@ export function ContactSellerModal({
       // close after a moment; keep it simple + reliable
       setTimeout(() => onClose(), 600);
     },
-    onError: (e: any) => {
-      setNotice(e?.message ?? "Could not send message.");
+    onError: (e: unknown) => {
+      setNotice(errorMessage(e, "Could not send message."));
     },
   });
 
@@ -60,22 +61,22 @@ export function ContactSellerModal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-overlay px-4"
       onMouseDown={(e) => {
         // click outside closes
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-950 p-5 text-white shadow-xl">
+      <div className="w-full max-w-lg rounded-2xl border border-line bg-bg p-5 text-fg shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold">Contact seller</h2>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="text-sm text-subtle mt-1">
               Send a message to the seller about this listing.
             </p>
           </div>
           <button
-            className="text-slate-300 hover:text-white"
+            className="text-muted hover:text-fg"
             onClick={onClose}
             type="button"
           >
@@ -84,15 +85,15 @@ export function ContactSellerModal({
         </div>
 
         {notice ? (
-          <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-slate-200">
+          <div className="mt-4 rounded-xl border border-line bg-surface px-4 py-3 text-fg">
             {notice}
           </div>
         ) : null}
 
         <div className="mt-4">
-          <label className="text-sm text-slate-300">Message</label>
+          <label className="text-sm text-muted">Message</label>
           <textarea
-            className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900/40 p-3 text-slate-100 placeholder:text-slate-500 outline-none focus:border-slate-600 min-h-[120px]"
+            className="mt-2 w-full rounded-xl border border-line bg-surface p-3 text-fg placeholder:text-subtle outline-none focus:border-line-strong min-h-[120px]"
             placeholder={
               userId
                 ? "Hi! Is this still available? Can we schedule a time to see it?"
@@ -106,7 +107,7 @@ export function ContactSellerModal({
 
         <div className="mt-4 flex justify-end gap-2">
           <button
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700"
+            className="px-4 py-2 rounded-lg bg-surface-2 hover:bg-surface-3"
             onClick={onClose}
             type="button"
             disabled={send.isPending}
@@ -114,7 +115,7 @@ export function ContactSellerModal({
             Cancel
           </button>
           <button
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg disabled:opacity-50"
             onClick={() => {
               setNotice(null);
               if (!userId) {

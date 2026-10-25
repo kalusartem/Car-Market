@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "include": ["/listings/*", "/cars/*", "/sitemap.xml", "/robots.txt"],
+  "exclude": []
+}
