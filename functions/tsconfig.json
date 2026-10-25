@@ -4,12 +4,12 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": [],
+    "types": ["node"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["./**/*.ts", "../src/lib/listingSeo.ts", "../src/lib/format.ts", "../src/types/car.ts"]
+  "include": ["./**/*.ts", "../src/lib/listingSeo.ts", "../src/lib/format.ts", "../src/types/car.ts", "../server/**/*.ts"]
 }

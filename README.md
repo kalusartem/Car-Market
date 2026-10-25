@@ -150,6 +150,11 @@ Test them locally with `npm run build && npx wrangler pages dev dist --binding V
 
 After deploying: add the production URL to Supabase's redirect allow-list, submit `/sitemap.xml` in Google Search Console, and add the `SUPABASE_URL` / `SUPABASE_ANON_KEY` repository secrets for the keep-alive workflow.
 
+### Self-hosting instead
+
+`npm run build:all && npm start` serves the same app and SEO routes from one Node process
+(`server/index.ts`). Caddyfile, systemd unit and a step-by-step guide are in [`deploy/`](deploy/README.md).
+
 ## 🚗 Vehicle data
 
 Makes, models, VIN decoding and recalls come from NHTSA's free public APIs (vPIC and Recalls; no key, CORS enabled).
