@@ -84,6 +84,15 @@ export function ListingDetailsPage() {
 
   const images = useMemo(() => (row ? sortedImages(row) : []), [row]);
   const urls = useMemo(() => images.map((i) => imageUrl(i.bucket, i.path)), [images]);
+  const photos = useMemo(
+    () =>
+      images.map((i) => ({
+        full: imageUrl(i.bucket, i.path),
+        large: imageUrl(i.bucket, i.path, 1600),
+        thumb: imageUrl(i.bucket, i.path, 240),
+      })),
+    [images],
+  );
 
   const price = row ? Number(row.price) : NaN;
   const verdict = usePriceCheck({
@@ -195,7 +204,7 @@ export function ListingDetailsPage() {
             </p>
           </header>
 
-          <Gallery urls={urls} alt={title} />
+          <Gallery photos={photos} alt={title} />
 
           <section aria-labelledby="specs-title">
             <h2 id="specs-title" className="mb-3 text-lg font-semibold">Details</h2>

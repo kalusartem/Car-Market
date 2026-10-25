@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, ImageIcon, XIcon } from "../../../components/icons";
+import { ResizedImage } from "../../../components/ResizedImage";
 
-type Props = { urls: string[]; alt: string };
+/** `full` is the original upload; `large` and `thumb` are resized copies for the page. */
+export type GalleryPhoto = { full: string; large: string; thumb: string };
 
-export function Gallery({ urls, alt }: Props) {
+type Props = { photos: GalleryPhoto[]; alt: string };
+
+export function Gallery({ photos, alt }: Props) {
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const opener = useRef<HTMLElement | null>(null);
-  const count = urls.length;
+  const count = photos.length;
 
   const go = useCallback(
     (delta: number) => setIndex((i) => (count ? (i + delta + count) % count : 0)),
@@ -56,8 +60,10 @@ export function Gallery({ urls, alt }: Props) {
             setOpen(true);
           }}
         >
-          <img
-            src={urls[index]}
+          <ResizedImage
+            key={photos[index].large}
+            src={photos[index].large}
+            fallback={photos[index].full}
             alt={`${alt} – photo ${index + 1} of ${count}`}
             className="aspect-[16/10] w-full object-cover"
           />
@@ -79,8 +85,8 @@ export function Gallery({ urls, alt }: Props) {
 
       {count > 1 ? (
         <ul className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Photo thumbnails">
-          {urls.map((u, i) => (
-            <li key={u} className="shrink-0">
+          {photos.map((p, i) => (
+            <li key={p.full} className="shrink-0">
               <button
                 type="button"
                 onClick={() => setIndex(i)}
@@ -88,7 +94,7 @@ export function Gallery({ urls, alt }: Props) {
                 aria-current={i === index}
                 className={`block overflow-hidden rounded-lg border-2 transition ${i === index ? "border-accent" : "border-transparent opacity-75 hover:opacity-100"}`}
               >
-                <img src={u} alt="" loading="lazy" className="h-16 w-24 object-cover" />
+                <ResizedImage src={p.thumb} fallback={p.full} alt="" loading="lazy" className="h-16 w-24 object-cover" />
               </button>
             </li>
           ))}
@@ -104,7 +110,7 @@ export function Gallery({ urls, alt }: Props) {
             </button>
           </div>
           <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 pb-4" onClick={(e) => e.target === e.currentTarget && setOpen(false)}>
-            <img src={urls[index]} alt={`${alt} – photo ${index + 1}`} className="max-h-full max-w-full object-contain" />
+            <img src={photos[index].full} alt={`${alt} – photo ${index + 1}`} className="max-h-full max-w-full object-contain" />
             {count > 1 ? (
               <>
                 <button type="button" onClick={() => go(-1)} aria-label="Previous photo" className="absolute left-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20">
