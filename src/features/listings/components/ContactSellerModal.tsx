@@ -93,7 +93,7 @@ export function ContactSellerModal({
         <div className="mt-4">
           <label className="text-sm text-muted">Message</label>
           <textarea
-            className="mt-2 w-full rounded-xl border border-line bg-surface p-3 text-fg placeholder:text-subtle outline-none focus:border-line-strong min-h-[120px]"
+            className="input mt-2 min-h-[120px]"
             placeholder={
               userId
                 ? "Hi! Is this still available? Can we schedule a time to see it?"
@@ -107,7 +107,7 @@ export function ContactSellerModal({
 
         <div className="mt-4 flex justify-end gap-2">
           <button
-            className="px-4 py-2 rounded-lg bg-surface-2 hover:bg-surface-3"
+            className="btn-secondary"
             onClick={onClose}
             type="button"
             disabled={send.isPending}
@@ -115,7 +115,7 @@ export function ContactSellerModal({
             Cancel
           </button>
           <button
-            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg disabled:opacity-50"
+            className="btn-primary"
             onClick={() => {
               setNotice(null);
               if (!userId) {

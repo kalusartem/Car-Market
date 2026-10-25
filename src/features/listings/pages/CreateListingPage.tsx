@@ -5,9 +5,9 @@ export function CreateListingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      <div className="max-w-4xl mx-auto px-6 pt-8">
-        <Link to="/listings" className="text-muted hover:text-fg">
+    <div>
+      <div className="mx-auto max-w-4xl px-4 pt-8 sm:px-6">
+        <Link to="/listings" className="text-sm font-medium text-muted hover:text-fg">
           ← Back to listings
         </Link>
       </div>
