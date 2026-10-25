@@ -624,7 +624,7 @@ export function ListingForm({
 
           <button
             type="button"
-            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg disabled:opacity-50"
+            className="btn-primary"
             disabled={mutation.isPending}
             onClick={() => mutation.mutate()}
           >
@@ -882,7 +882,7 @@ export function ListingForm({
               </div>
             </div>
 
-            <label className="px-3 py-2 rounded-lg bg-surface-2 hover:bg-surface-3 cursor-pointer">
+            <label className="btn-secondary cursor-pointer">
               Add images
               <input
                 type="file"

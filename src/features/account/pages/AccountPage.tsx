@@ -1,79 +1,85 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { supabase } from "../../../lib/supabase";
+import { useAuthUser } from "../../../lib/auth";
+import { CarIcon, HeartIcon, MailIcon } from "../../../components/icons";
+import { PageHeader, PageMessage } from "../../../components/PageHeader";
 import { SecuritySettings } from "../SecuritySettings";
 
-async function fetchUser() {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
-  return data.user ?? null;
-}
+const SHORTCUTS = [
+  { to: "/account/listings", label: "My listings", text: "Edit prices, photos and status", Icon: CarIcon },
+  { to: "/messages", label: "Messages", text: "Conversations with buyers and sellers", Icon: MailIcon },
+  { to: "/favorites", label: "Saved cars", text: "Cars you've hearted", Icon: HeartIcon },
+];
+
+const PROVIDER_NAMES: Record<string, string> = { github: "GitHub", google: "Google", email: "email" };
 
 export function AccountPage() {
-  const { data: user, isLoading } = useQuery({
-    queryKey: ["auth-user"],
-    queryFn: fetchUser,
-    staleTime: 1000 * 30,
-  });
+  const { data: user, isLoading } = useAuthUser();
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-bg text-fg p-6">Loading…</div>
+      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        <div className="card h-28 animate-pulse bg-surface-2" aria-hidden="true" />
+      </main>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-bg text-fg p-6">
-        <h1 className="text-2xl font-semibold">Account</h1>
-        <p className="text-subtle mt-2">You’re not signed in.</p>
-        <Link
-          to="/"
-          className="text-link hover:underline mt-4 inline-block"
-        >
-          Go home
-        </Link>
-      </div>
+      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        <PageHeader title="Account" />
+        <PageMessage>
+          You're not signed in.{" "}
+          <Link to="/login?next=%2Faccount" className="font-semibold text-link hover:underline">
+            Sign in
+          </Link>
+        </PageMessage>
+      </main>
     );
   }
 
-  const email = user.email ?? "—";
-  const name =
-    user.user_metadata?.full_name ?? user.user_metadata?.user_name ?? "—";
+  const name: string | undefined = user.user_metadata?.full_name ?? user.user_metadata?.user_name;
+  const avatar: string | undefined = user.user_metadata?.avatar_url;
+  const providers = (user.app_metadata?.providers as string[] | undefined) ?? [];
+  const initial = (name ?? user.email ?? "?").charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      <div className="max-w-3xl mx-auto px-6 py-10">
-        <h1 className="text-2xl font-semibold">My account</h1>
+    <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      <PageHeader title="Account" />
 
-        <div className="mt-6 rounded-2xl border border-line bg-surface p-6">
-          <div className="text-sm text-subtle">Name</div>
-          <div className="mt-1">{name}</div>
-
-          <div className="text-sm text-subtle mt-4">Email</div>
-          <div className="mt-1">{email}</div>
-
-          <div className="text-sm text-subtle mt-4">User ID</div>
-          <div className="mt-1 break-all text-muted">{user.id}</div>
-
-          <div className="mt-6 flex gap-3 flex-wrap">
-            <Link
-              to="/sell"
-              className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg"
-            >
-              Create listing
-            </Link>
-            <Link
-              to="/favorites"
-              className="px-4 py-2 rounded-lg bg-surface-2 hover:bg-surface-3"
-            >
-              Saved cars
-            </Link>
-          </div>
+      <section className="card mt-6 flex items-center gap-4 p-5" aria-label="Profile">
+        {avatar ? (
+          <img src={avatar} alt="" referrerPolicy="no-referrer" className="h-14 w-14 rounded-full border border-line object-cover" />
+        ) : (
+          <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-xl font-bold text-link">
+            {initial}
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-lg font-semibold">{name ?? user.email}</p>
+          {name && user.email ? <p className="truncate text-sm text-muted">{user.email}</p> : null}
+          {providers.length ? (
+            <p className="mt-1 text-xs text-subtle">
+              Signed in with {providers.map((p) => PROVIDER_NAMES[p] ?? p).join(" and ")}
+            </p>
+          ) : null}
         </div>
+      </section>
 
-        <SecuritySettings />
-      </div>
-    </div>
+      <ul className="mt-4 grid gap-3 sm:grid-cols-3">
+        {SHORTCUTS.map(({ to, label, text, Icon }) => (
+          <li key={to}>
+            <Link to={to} className="card flex h-full flex-col p-4 transition hover:-translate-y-0.5 hover:shadow-pop">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-link">
+                <Icon size={18} />
+              </span>
+              <span className="mt-3 font-semibold">{label}</span>
+              <span className="mt-0.5 text-sm text-muted">{text}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      <SecuritySettings />
+    </main>
   );
 }

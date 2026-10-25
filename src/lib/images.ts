@@ -5,9 +5,10 @@ import { supabase } from "./supabase";
 /**
  * Public URL for a stored image. Pass `width` to get a resized copy from Supabase image
  * transformations (served as WebP to browsers that accept it); omit it for the original.
+ * `contain` keeps the aspect ratio: the default `cover` keeps the original height and crops the width.
  */
 export function imageUrl(bucket: string, path: string, width?: number) {
-  const options = width ? { transform: { width, quality: 75 } } : undefined;
+  const options = width ? { transform: { width, quality: 75, resize: "contain" as const } } : undefined;
   return supabase.storage.from(bucket).getPublicUrl(path, options).data.publicUrl;
 }
 
