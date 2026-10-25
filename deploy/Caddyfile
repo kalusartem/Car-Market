@@ -1,0 +1,14 @@
+# Caddy terminates HTTPS (free Let's Encrypt certificate, renewed automatically) and
+# forwards to the Node server. Ports 80 and 443 must reach this machine from the internet.
+car-market.duckdns.org {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	reverse_proxy 127.0.0.1:8787
+}

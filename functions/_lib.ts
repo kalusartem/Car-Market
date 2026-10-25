@@ -84,7 +84,9 @@ export interface PageMeta {
 
 const a = escapeHtml;
 
-export function renderShell(shell: Response, meta: PageMeta, status = 200) {
+/** Rewrites <head> and #root of the built index.html. Plain string edits, so the same
+ *  code runs on Cloudflare Pages Functions and on the Node server in server/. */
+export async function renderShell(shell: Response, meta: PageMeta, status = 200) {
   const tags = [
     `<meta name="description" content="${a(meta.description)}">`,
     `<link rel="canonical" href="${a(meta.canonical)}">`,
@@ -100,28 +102,28 @@ export function renderShell(shell: Response, meta: PageMeta, status = 200) {
     meta.jsonLd
       ? `<script type="application/ld+json">${JSON.stringify(meta.jsonLd).replace(/</g, "\\u003c")}</script>`
       : "",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  return new HTMLRewriter()
-    .on("title", { element: (el) => void el.setInnerContent(meta.title) })
-    .on('meta[name="description"]', { element: (el) => void el.remove() })
-    .on('meta[property^="og:"]', { element: (el) => void el.remove() })
-    .on('meta[name="twitter:card"]', { element: (el) => void el.remove() })
-    .on("head", { element: (el) => void el.append(tags, { html: true }) })
-    .on("div#root", {
-      element: (el) => {
-        if (meta.bodyHtml) el.setInnerContent(meta.bodyHtml, { html: true });
-      },
-    })
-    .transform(
-      new Response(shell.body, {
-        status,
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          "cache-control": "public, max-age=60, s-maxage=300",
-        },
-      }),
-    );
+  let html = await shell.text();
+  html = html
+    .replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${a(meta.title)}</title>`)
+    .replace(/<meta\s+name="description"[^>]*>/gi, "")
+    .replace(/<meta\s+property="og:[^"]*"[^>]*>/gi, "")
+    .replace(/<meta\s+name="twitter:card"[^>]*>/gi, "")
+    .replace(/<\/head>/i, () => `${tags}\n</head>`);
+  if (meta.bodyHtml) {
+    html = html.replace(/<div id="root">\s*<\/div>/i, () => `<div id="root">${meta.bodyHtml}</div>`);
+  }
+
+  return new Response(html, {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=60, s-maxage=300",
+    },
+  });
 }
 
 export const staticBody = (inner: string) =>

@@ -1,0 +1,22 @@
+[Unit]
+Description=Car Market web server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=carmarket
+WorkingDirectory=/opt/car-market
+EnvironmentFile=/etc/car-market.env
+ExecStart=/usr/bin/node server-dist/server.mjs
+Restart=on-failure
+RestartSec=3
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/car-market
+
+[Install]
+WantedBy=multi-user.target
