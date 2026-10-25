@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
 
+// The schema is not generated into TypeScript types, so the client is untyped.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const supabase = createClient<any, "carmarket">(supabaseUrl, supabaseAnonKey, {
   // Car Market tables live in their own schema in the shared Supabase project.
   db: { schema: "carmarket" },
@@ -10,7 +12,7 @@ export const supabase = createClient<any, "carmarket">(supabaseUrl, supabaseAnon
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storage: localStorage,
+    storage: typeof localStorage === "undefined" ? undefined : localStorage,
   },
 });
 

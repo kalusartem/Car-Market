@@ -1,11 +1,12 @@
 // src/features/listings/pages/EditListingPage.tsx
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
 import { ListingForm } from "../components/ListingForm";
 import type { ListingRow } from "../components/ListingForm";
-import { fetchAuthUser } from "../../../lib/auth";
+import { useAuthUser } from "../../../lib/auth";
 import { fetchIsAdmin } from "../../../lib/admin";
+import { errorMessage } from "../../../lib/errors";
 
 async function fetchListing(id: string) {
   const { data, error } = await supabase
@@ -18,84 +19,31 @@ async function fetchListing(id: string) {
   return data as ListingRow;
 }
 
+function Notice({ children, back }: { children: React.ReactNode; back?: { to: string; label: string } }) {
+  return (
+    <div className="mx-auto max-w-3xl px-6 py-12">
+      <div className="text-muted">{children}</div>
+      {back ? (
+        <Link to={back.to} className="mt-3 inline-block text-link hover:underline">
+          {back.label}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 export function EditListingPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-
-  if (!id) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="text-red-300">Missing listing id.</div>
-        <Link to="/listings" className="text-blue-400 hover:underline">
-          Back to listings
-        </Link>
-      </div>
-    );
-  }
-
-  // 1) Load auth user
-  const {
-    data: user,
-    isLoading: isAuthLoading,
-    isError: isAuthError,
-    error: authError,
-  } = useQuery({
-    queryKey: ["auth-user"],
-    queryFn: fetchAuthUser,
-    staleTime: 1000 * 30,
-  });
-
+  const { data: user, isLoading: isAuthLoading } = useAuthUser();
   const userId = user?.id ?? null;
 
-  // Auth loading / error states
-  if (isAuthLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        Loading session…
-      </div>
-    );
-  }
-
-  if (isAuthError) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="text-red-300">
-          Auth error: {(authError as any)?.message ?? "Unknown error"}
-        </div>
-        <Link to="/listings" className="text-blue-400 hover:underline">
-          Back to listings
-        </Link>
-      </div>
-    );
-  }
-
-  // Require login for edit page
-  if (!userId) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="text-slate-300">
-          You need to be logged in to edit listings.
-        </div>
-        <Link to="/listings" className="text-blue-400 hover:underline">
-          Back to listings
-        </Link>
-      </div>
-    );
-  }
-
-  // 2) Load admin flag (only once user is known)
-  const {
-    data: isAdmin,
-    isLoading: isAdminLoading,
-    isError: isAdminError,
-  } = useQuery({
+  const { data: isAdmin, isLoading: isAdminLoading } = useQuery({
     queryKey: ["is-admin", userId],
     enabled: !!userId,
     queryFn: () => fetchIsAdmin(userId),
-    staleTime: 1000 * 30,
+    staleTime: 30_000,
   });
 
-  // 3) Load the listing
   const {
     data: listing,
     isLoading: isListingLoading,
@@ -103,87 +51,38 @@ export function EditListingPage() {
     error: listingError,
   } = useQuery({
     queryKey: ["listing-edit", id],
-    queryFn: () => fetchListing(id),
+    queryFn: () => fetchListing(id!),
     enabled: !!id && !!userId,
   });
 
-  if (isListingLoading || isAdminLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        Loading listing…
-      </div>
-    );
-  }
-
+  if (!id) return <Notice back={{ to: "/listings", label: "Back to listings" }}>Missing listing id.</Notice>;
+  if (isAuthLoading || isListingLoading || isAdminLoading) return <Notice>Loading listing…</Notice>;
   if (isListingError) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="text-red-300">
-          Failed to load listing:{" "}
-          {(listingError as any)?.message ?? "Unknown error"}
-        </div>
-        <Link to="/listings" className="text-blue-400 hover:underline">
-          Back to listings
-        </Link>
-      </div>
+      <Notice back={{ to: "/listings", label: "Back to listings" }}>
+        <span className="text-danger">Failed to load listing: {errorMessage(listingError, "Unknown error")}</span>
+      </Notice>
     );
   }
+  if (!listing) return <Notice back={{ to: "/listings", label: "Back to listings" }}>Listing not found.</Notice>;
 
-  if (!listing) {
+  if (!isAdmin && listing.seller_id !== userId) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="text-red-300">Listing not found.</div>
-        <Link to="/listings" className="text-blue-400 hover:underline">
-          Back to listings
-        </Link>
-      </div>
-    );
-  }
-
-  // If admin lookup errored, default to non-admin (but don't crash)
-  const admin = !!isAdmin && !isAdminError;
-
-  const canEdit = admin || listing.seller_id === userId;
-
-  if (!canEdit) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="text-red-300">
-          You don’t have permission to edit this listing.
-        </div>
-        <Link to={`/listings/${id}`} className="text-blue-400 hover:underline">
-          View listing
-        </Link>
-      </div>
+      <Notice back={{ to: `/listings/${id}`, label: "View listing" }}>
+        You don’t have permission to edit this listing.
+      </Notice>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <div className="max-w-4xl mx-auto px-6 pt-8">
-        <Link
-          to={`/listings/${id}`}
-          className="text-slate-300 hover:text-white"
-        >
+    <div>
+      <div className="mx-auto max-w-4xl px-6 pt-8">
+        <Link to={`/listings/${id}`} className="text-muted hover:text-fg">
           ← Back to listing
         </Link>
-
-        <button
-          className="ml-4 text-sm text-slate-300 hover:text-white"
-          onClick={() => navigate("/listings")}
-        >
-          Browse
-        </button>
       </div>
 
-      <ListingForm
-        mode="edit"
-        listingId={id}
-        initial={listing}
-        onSaved={() => {
-          // optional: toast later
-        }}
-      />
+      <ListingForm mode="edit" listingId={id} initial={listing} />
     </div>
   );
 }

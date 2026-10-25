@@ -26,3 +26,4 @@ dist-ssr
 # local env (Supabase URL/key)
 .env
 .env.*
+!.env.example

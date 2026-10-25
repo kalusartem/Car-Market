@@ -1,10 +1,40 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>car-market</title>
+    <meta name="theme-color" content="#f4f6f9" />
+    <title>Car Market – Buy and sell used cars from private sellers</title>
+    <meta
+      name="description"
+      content="Browse used cars by make, model, price and distance. List your car for free, decode its VIN in one step, and see how your price compares to similar listings."
+    />
+    <meta property="og:site_name" content="Car Market" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Car Market – Buy and sell used cars from private sellers" />
+    <meta
+      property="og:description"
+      content="Browse used cars by make, model, price and distance. List your car for free and see how your price compares."
+    />
+    <meta name="twitter:card" content="summary" />
+    <script>
+      // Resolve the theme before first paint so there is no light/dark flash.
+      // Keep in sync with lib/theme.ts. Light is the default.
+      (function () {
+        try {
+          var p = localStorage.getItem("theme");
+          var dark =
+            p === "dark" ||
+            (p === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+          if (dark)
+            document
+              .querySelector('meta[name="theme-color"]')
+              .setAttribute("content", "#060b18");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

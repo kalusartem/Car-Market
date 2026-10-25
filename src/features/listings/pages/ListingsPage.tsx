@@ -1,480 +1,283 @@
-// src/features/listings/pages/ListingsPage.tsx
-import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "../../../lib/supabase";
-import { FilterBar } from "../components/FilterBar";
-import { geocodeZip } from "../../../lib/location";
-
-type Filters = {
-  search: string;
-  make: string;
-  maxPrice: number; // DEFAULT_MAX_PRICE means "no limit"
-  zip: string;
-  radiusMiles: number; // 0 = ignore
-};
-
-type SortKey = "newest" | "price_asc" | "price_desc";
-
-type ListingImage = {
-  bucket: string;
-  path: string;
-  position: number;
-};
-
-type ListingRow = {
-  id: string;
-  make: string;
-  model: string;
-  year: number | null;
-  price: number | string;
-  mileage: number | null;
-  created_at: string | null;
-  listing_images?: ListingImage[] | null;
-};
-
-// Browse page requirement: paginate at 25
-const PAGE_SIZE = 25;
-
-// "Unlimited" sentinel for max price
-const DEFAULT_MAX_PRICE = Number.MAX_SAFE_INTEGER;
-
-function toNumber(value: string | null, fallback: number) {
-  if (value === null || value === undefined || value === "") return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function publicUrl(bucket: string, path: string) {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
-}
-
-async function fetchListings(args: {
-  filters: Filters;
-  sort: SortKey;
-  page: number;
-}): Promise<{ rows: ListingRow[]; count: number }> {
-  const { filters, sort, page } = args;
-
-  // Location-aware search uses a lightweight RPC to get ordered IDs within radius,
-  // then pulls the listing rows + images in a second query.
-  const useRadius = !!filters.zip.trim() && (filters.radiusMiles ?? 0) > 0;
-  if (useRadius) {
-    const ll = await geocodeZip(filters.zip);
-    if (!ll) {
-      // If ZIP can't be geocoded, fall back to normal search (no radius).
-    } else {
-      const { data: idRows, error: idErr } = await supabase.rpc(
-        "search_listing_ids_within_radius",
-        {
-          p_lat: ll.lat,
-          p_lng: ll.lng,
-          p_radius_miles: filters.radiusMiles,
-          p_search: filters.search?.trim() || null,
-          p_make: filters.make || null,
-          p_max_price:
-            filters.maxPrice === DEFAULT_MAX_PRICE ? null : filters.maxPrice,
-          p_sort: sort,
-          p_page: page,
-          p_page_size: PAGE_SIZE,
-        },
-      );
-
-      if (idErr) {
-        // If the RPC isn't deployed yet, we fall back gracefully.
-      } else {
-        const ids = (idRows ?? []).map((r: any) => r.listing_id as string);
-        const totalCount =
-          (idRows?.[0]?.total_count as number | undefined) ?? 0;
-        if (!ids.length) return { rows: [], count: totalCount };
-
-        const { data, error } = await supabase
-          .from("listings")
-          .select("*, listing_images(bucket, path, position)", { count: "exact" })
-          .in("id", ids);
-        if (error) throw error;
-
-        // Keep the rows in the same order as the RPC returned.
-        const order = new Map<string, number>(
-          ids.map((id: string, idx: number): [string, number] => [id, idx]),
-        );
-        const rows = ((data ?? []) as ListingRow[]).slice().sort((a, b) => {
-          return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
-        });
-
-        return { rows, count: totalCount };
-      }
-    }
-  }
-
-  let q = supabase
-    .from("listings")
-    .select("*, listing_images(bucket, path, position)", { count: "exact" })
-    .eq("is_active", true);
-
-  const term = filters.search.trim();
-  if (term) {
-    q = q.or(`make.ilike.%${term}%,model.ilike.%${term}%`);
-  }
-
-  if (filters.make) q = q.eq("make", filters.make);
-
-  // Only apply max price filter when user has set a limit
-  if (filters.maxPrice !== DEFAULT_MAX_PRICE) {
-    q = q.lte("price", filters.maxPrice);
-  }
-
-  if (sort === "newest") q = q.order("created_at", { ascending: false });
-  if (sort === "price_asc") q = q.order("price", { ascending: true });
-  if (sort === "price_desc") q = q.order("price", { ascending: false });
-
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-  q = q.range(from, to);
-
-  const { data, error, count } = await q;
-  if (error) throw error;
-
-  return { rows: (data ?? []) as ListingRow[], count: count ?? 0 };
-}
-
-async function fetchUserId(): Promise<string | null> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
-  return data?.user?.id ?? null;
-}
-
-async function fetchFavoritesForListingIds(
-  userId: string,
-  listingIds: string[],
-): Promise<Set<string>> {
-  if (!listingIds.length) return new Set();
-
-  const { data, error } = await supabase
-    .from("favorites")
-    .select("listing_id")
-    .eq("user_id", userId)
-    .in("listing_id", listingIds);
-
-  if (error) throw error;
-  return new Set((data ?? []).map((r: any) => r.listing_id as string));
-}
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { usePageMeta } from "../../../hooks/usePageMeta";
+import { useFavorites } from "../../favorites/useFavorites";
+import { useExtendedSpecs } from "../../../lib/features";
+import { slugify, unslugify } from "../../../lib/format";
+import { SlidersIcon, XIcon } from "../../../components/icons";
+import { fetchListings, PAGE_SIZE } from "../api";
+import {
+  activeChips,
+  filtersToParams,
+  parseFilters,
+  SORT_OPTIONS,
+  type Filters,
+} from "../filters";
+import { FilterPanel } from "../components/FilterPanel";
+import { ListingCard, ListingCardSkeleton } from "../components/ListingCard";
 
 export function ListingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { make: makeSlug, model: modelSlug } = useParams<{ make?: string; model?: string }>();
+  const extended = useExtendedSpecs();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const urlFilters = useMemo<Filters>(() => {
-    const search = searchParams.get("q") ?? "";
-    const make = searchParams.get("make") ?? "";
-    const zip = searchParams.get("zip") ?? "";
-    const radiusMiles = clamp(toNumber(searchParams.get("radius"), 0), 0, 500);
+  const pathMake = makeSlug ? unslugify(makeSlug) : undefined;
+  const pathModel = modelSlug ? unslugify(modelSlug) : undefined;
+  const fromPath = !!pathMake;
 
-    // If maxPrice is missing in URL => unlimited
-    const maxPrice = clamp(
-      toNumber(searchParams.get("maxPrice"), DEFAULT_MAX_PRICE),
-      0,
-      DEFAULT_MAX_PRICE,
-    );
-
-    return { search, make, maxPrice, zip, radiusMiles };
-  }, [searchParams]);
-
-  const urlSort = (searchParams.get("sort") as SortKey) ?? "newest";
-  const urlPage = clamp(toNumber(searchParams.get("page"), 1), 1, 1_000_000);
-
-  const [filters, setFilters] = useState<Filters>(urlFilters);
-  const [sort, setSort] = useState<SortKey>(urlSort);
-
-  useEffect(() => setFilters(urlFilters), [urlFilters]);
-  useEffect(() => setSort(urlSort), [urlSort]);
-
-  // Push local state -> URL, reset page
-  useEffect(() => {
-    const next = new URLSearchParams(searchParams);
-    next.set("page", "1");
-
-    if (filters.search) next.set("q", filters.search);
-    else next.delete("q");
-
-    if (filters.make) next.set("make", filters.make);
-    else next.delete("make");
-
-    if (filters.zip) next.set("zip", filters.zip);
-    else next.delete("zip");
-
-    if (filters.radiusMiles && filters.radiusMiles > 0)
-      next.set("radius", String(filters.radiusMiles));
-    else next.delete("radius");
-
-    // Only store maxPrice in URL if it's not "unlimited"
-    if (filters.maxPrice !== DEFAULT_MAX_PRICE) {
-      next.set("maxPrice", String(filters.maxPrice));
-    } else {
-      next.delete("maxPrice");
-    }
-
-    next.set("sort", sort);
-
-    setSearchParams(next, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.search, filters.make, filters.zip, filters.radiusMiles, filters.maxPrice, sort]);
-
-  const page = urlPage;
-
-  const { data, isLoading, isError, error, isFetching } = useQuery({
-    queryKey: ["listings", filters, sort, page],
-    queryFn: () => fetchListings({ filters, sort, page }),
-    placeholderData: (prev) => prev,
-    staleTime: 1000 * 15,
-  });
-
-  const total = data?.count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  const listingIds = useMemo(() => (data?.rows ?? []).map((r) => r.id), [data]);
-
-  const { data: userId } = useQuery({
-    queryKey: ["auth-user-id"],
-    queryFn: fetchUserId,
-    staleTime: 1000 * 30,
-  });
-
-  const favKey = useMemo(
-    () => ["favorites-for-page", userId, listingIds.join("|")] as const,
-    [userId, listingIds],
+  const filters = useMemo(
+    () => parseFilters(searchParams, { make: pathMake, model: pathModel }),
+    [searchParams, pathMake, pathModel],
   );
 
-  const { data: favSet } = useQuery({
-    queryKey: favKey,
-    enabled: !!userId && listingIds.length > 0,
-    queryFn: () => fetchFavoritesForListingIds(userId!, listingIds),
-    staleTime: 1000 * 10,
+  const update = useCallback(
+    (patch: Partial<Filters>) => {
+      const next: Filters = { ...filters, ...patch, page: patch.page ?? 1 };
+      const params = filtersToParams(next);
+      // Landing pages like /cars/toyota/camry hand over to /listings once refined.
+      if (fromPath) navigate(`/listings?${params}`);
+      else setSearchParams(params, { replace: patch.page === undefined });
+    },
+    [filters, fromPath, navigate, setSearchParams],
+  );
+
+  const clear = () => navigate("/listings");
+
+  const { data, isLoading, isError, error, isFetching } = useQuery({
+    queryKey: ["listings", filters, extended],
+    queryFn: () => fetchListings(filters, extended),
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
   });
 
-  const toggleFavorite = useMutation({
-    mutationFn: async (listingId: string) => {
-      if (!userId) throw new Error("Please log in to save favorites.");
+  const rows = useMemo(() => data?.rows ?? [], [data]);
+  const total = data?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const ids = useMemo(() => rows.map((r) => r.id), [rows]);
+  const favorites = useFavorites(ids);
+  const chips = activeChips(filters);
 
-      const isFav = favSet?.has(listingId) ?? false;
+  const heading = filters.make
+    ? filters.model
+      ? `Used ${filters.make} ${filters.model} for sale`
+      : `Used ${filters.make} cars for sale`
+    : "Used cars for sale";
 
-      if (isFav) {
-        const { error } = await supabase
-          .from("favorites")
-          .delete()
-          .eq("user_id", userId)
-          .eq("listing_id", listingId);
+  const onlyMakeModel =
+    chips.every((c) => c.key === "make" || c.key === "model") && filters.page === 1 && filters.sort === "newest";
+  const canonicalPath = filters.make
+    ? `/cars/${slugify(filters.make)}${filters.model ? `/${slugify(filters.model)}` : ""}`
+    : "/listings";
 
-        if (error) throw error;
-        return { listingId, next: false };
-      } else {
-        const { error } = await supabase
-          .from("favorites")
-          .insert({ user_id: userId, listing_id: listingId });
-
-        if (error) throw error;
-        return { listingId, next: true };
-      }
-    },
-    onMutate: async (listingId) => {
-      await qc.cancelQueries({ queryKey: favKey });
-
-      const prev = qc.getQueryData<Set<string>>(favKey);
-      const next = new Set<string>(prev ?? favSet ?? new Set());
-
-      if (next.has(listingId)) next.delete(listingId);
-      else next.add(listingId);
-
-      qc.setQueryData(favKey, next);
-      return { prev };
-    },
-    onError: (_err, _listingId, ctx) => {
-      if (ctx?.prev) qc.setQueryData(favKey, ctx.prev);
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["favorites"] });
-    },
+  usePageMeta({
+    title: heading,
+    description: `${heading}${total ? ` – ${total} listing${total === 1 ? "" : "s"}` : ""} from private sellers. Filter by price, mileage, year and distance.`,
+    canonicalPath: onlyMakeModel ? canonicalPath : undefined,
+    noindex: !onlyMakeModel,
   });
 
-  const goToPage = (p: number) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("page", String(clamp(p, 1, totalPages)));
-    setSearchParams(next);
-  };
+  // Keep the page at the top when paging, and lock body scroll behind the drawer.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [filters.page]);
+  useEffect(() => {
+    document.body.style.overflow = drawerOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [drawerOpen]);
+
+  const panel = (
+    <FilterPanel
+      filters={filters}
+      onChange={update}
+      onClear={() => {
+        clear();
+        setDrawerOpen(false);
+      }}
+      zipProblem={data?.zipNotFound}
+    />
+  );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <div className="max-w-7xl mx-auto px-6 pt-8">
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-semibold">Browse Listings</h1>
-            <p className="text-slate-400 text-sm mt-1">
-              Filter, sort, and save your favorites.
-            </p>
-          </div>
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      {fromPath ? (
+        <nav aria-label="Breadcrumb" className="mb-3 text-sm text-subtle">
+          <Link to="/listings" className="hover:text-fg hover:underline">
+            All cars
+          </Link>
+          {filters.make ? (
+            <>
+              <span className="mx-1.5">/</span>
+              {filters.model ? (
+                <Link to={`/cars/${slugify(filters.make)}`} className="hover:text-fg hover:underline">
+                  {filters.make}
+                </Link>
+              ) : (
+                <span className="text-fg">{filters.make}</span>
+              )}
+            </>
+          ) : null}
+          {filters.model ? (
+            <>
+              <span className="mx-1.5">/</span>
+              <span className="text-fg">{filters.model}</span>
+            </>
+          ) : null}
+        </nav>
+      ) : null}
 
-          <div className="flex items-center gap-3">
+      <div className="grid gap-8 lg:grid-cols-[17.5rem_1fr]">
+        <aside className="hidden lg:block" aria-label="Filters">
+          <div className="card sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto p-4">{panel}</div>
+        </aside>
+
+        <section aria-live="polite">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{heading}</h1>
+              <p className="mt-1 text-sm text-subtle">
+                {isLoading
+                  ? "Loading…"
+                  : `${total.toLocaleString("en-US")} ${total === 1 ? "car" : "cars"}`}
+                {isFetching && !isLoading ? " · updating…" : ""}
+              </p>
+            </div>
+
             <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-300">Sort</label>
-              <select
-                className="bg-slate-800 rounded-lg px-3 py-2 text-white"
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
+              <button
+                type="button"
+                className="btn-secondary lg:hidden"
+                onClick={() => setDrawerOpen(true)}
               >
-                <option value="newest">Newest</option>
-                <option value="price_asc">Price: Low → High</option>
-                <option value="price_desc">Price: High → Low</option>
-              </select>
+                <SlidersIcon size={16} />
+                Filters{chips.length ? ` (${chips.length})` : ""}
+              </button>
+              <label className="flex items-center gap-2 text-sm text-muted">
+                <span className="sr-only sm:not-sr-only">Sort</span>
+                <select
+                  className="input w-auto"
+                  value={filters.sort}
+                  onChange={(e) => update({ sort: e.target.value as Filters["sort"] })}
+                >
+                  {SORT_OPTIONS.filter(
+                    (o) => o.value !== "distance" || (filters.zip && filters.radius > 0),
+                  ).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
-        </div>
-      </div>
 
-      <FilterBar filters={filters} setFilters={setFilters} />
-
-      <div className="max-w-7xl mx-auto px-6 pb-12">
-        {isLoading && <div className="text-slate-300">Loading listings…</div>}
-
-        {isError && (
-          <div className="text-red-300">
-            Failed to load listings:{" "}
-            {(error as any)?.message ?? "Unknown error"}
-          </div>
-        )}
-
-        {!isLoading && !isError && (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-sm text-slate-400">
-                Showing {data?.rows.length ?? 0} of {total} results
-                {isFetching ? <span className="ml-2">• Updating…</span> : null}
-              </div>
-
-              <button
-                className="text-sm text-slate-300 hover:text-white"
-                onClick={() => {
-                  // Reset all filters to defaults (including maxPrice unlimited)
-                  setSearchParams(
-                    new URLSearchParams({
-                      sort: "newest",
-                      page: "1",
-                    }),
-                  );
-                }}
-              >
-                Clear filters
+          {chips.length ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {chips.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => update(c.patch)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3 py-1 text-sm text-fg transition hover:bg-surface-2"
+                  aria-label={`Remove filter ${c.label}`}
+                >
+                  {c.label}
+                  <XIcon size={14} />
+                </button>
+              ))}
+              <button type="button" className="text-sm text-link hover:underline" onClick={clear}>
+                Clear all
               </button>
             </div>
+          ) : null}
 
-            {(data?.rows?.length ?? 0) === 0 ? (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-8 text-slate-300">
-                No listings match your filters. Try widening your search.
+          <div className="mt-5">
+            {isError ? (
+              <div role="alert" className="rounded-xl border border-danger/30 bg-danger-bg p-4 text-danger">
+                Couldn’t load listings: {error instanceof Error ? error.message : "Unknown error"}
+              </div>
+            ) : isLoading ? (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <ListingCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : rows.length === 0 ? (
+              <div className="card p-10 text-center">
+                <h2 className="text-lg font-semibold">No cars match these filters</h2>
+                <p className="mt-1 text-muted">Try removing a filter or widening the search area.</p>
+                {chips.length ? (
+                  <button type="button" className="btn-primary mt-4" onClick={clear}>
+                    Clear all filters
+                  </button>
+                ) : null}
               </div>
             ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(data?.rows ?? []).map((row: ListingRow) => {
-                  const images = (row.listing_images ?? [])
-                    .slice()
-                    .sort(
-                      (a: ListingImage, b: ListingImage) =>
-                        (a.position ?? 0) - (b.position ?? 0),
-                    );
-
-                  const cover = images[0];
-                  const coverUrl = cover
-                    ? publicUrl(cover.bucket, cover.path)
-                    : null;
-
-                  const isFav = !!userId && (favSet?.has(row.id) ?? false);
-
-                  return (
-                    <Link
-                      key={row.id}
-                      to={`/listings/${row.id}`}
-                      className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 hover:border-slate-700 transition relative"
-                    >
-                      <button
-                        type="button"
-                        className="absolute top-3 right-3 z-10 rounded-full bg-black/50 hover:bg-black/70 px-3 py-2 text-sm disabled:opacity-50"
-                        title={
-                          userId
-                            ? isFav
-                              ? "Unsave"
-                              : "Save"
-                            : "Log in to save"
-                        }
-                        disabled={!userId || toggleFavorite.isPending}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          toggleFavorite.mutate(row.id);
-                        }}
-                      >
-                        {isFav ? "❤️" : "🤍"}
-                      </button>
-
-                      {coverUrl ? (
-                        <img
-                          src={coverUrl}
-                          alt={`${row.make} ${row.model}`}
-                          className="w-full h-40 object-cover rounded-xl border border-slate-800 mb-3"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-full h-40 rounded-xl border border-slate-800 bg-slate-950/40 mb-3 flex items-center justify-center text-slate-500">
-                          No image
-                        </div>
-                      )}
-
-                      <div className="font-semibold">
-                        {row.make} {row.model}
-                      </div>
-
-                      <div className="text-slate-300 mt-1">
-                        ${Number(row.price).toLocaleString()}
-                      </div>
-
-                      <div className="text-xs text-slate-400 mt-2">
-                        {row.year ?? "—"} •{" "}
-                        {typeof row.mileage === "number"
-                          ? `${row.mileage.toLocaleString()} mi`
-                          : (row.mileage ?? "—")}
-                      </div>
-                    </Link>
-                  );
-                })}
+              <div
+                className={`grid gap-4 sm:grid-cols-2 xl:grid-cols-3 ${isFetching ? "opacity-70 transition" : ""}`}
+              >
+                {rows.map((l) => (
+                  <ListingCard
+                    key={l.id}
+                    listing={l}
+                    saved={favorites.isSaved(l.id)}
+                    onToggleSave={favorites.toggle}
+                    distance={data?.distances[l.id]}
+                  />
+                ))}
               </div>
             )}
+          </div>
 
-            <div className="flex items-center justify-between mt-8">
+          {totalPages > 1 ? (
+            <nav aria-label="Pagination" className="mt-8 flex items-center justify-between">
               <button
-                className="px-4 py-2 rounded-lg bg-slate-800 disabled:opacity-50"
-                disabled={page <= 1}
-                onClick={() => goToPage(page - 1)}
+                type="button"
+                className="btn-secondary"
+                disabled={filters.page <= 1}
+                onClick={() => update({ page: filters.page - 1 })}
               >
-                Prev
+                Previous
               </button>
-
-              <div className="text-sm text-slate-300">
-                Page {page} / {totalPages}
-              </div>
-
+              <span className="text-sm text-muted">
+                Page {filters.page} of {totalPages}
+              </span>
               <button
-                className="px-4 py-2 rounded-lg bg-slate-800 disabled:opacity-50"
-                disabled={page >= totalPages}
-                onClick={() => goToPage(page + 1)}
+                type="button"
+                className="btn-secondary"
+                disabled={filters.page >= totalPages}
+                onClick={() => update({ page: filters.page + 1 })}
               >
                 Next
               </button>
-            </div>
-          </>
-        )}
+            </nav>
+          ) : null}
+        </section>
       </div>
+
+      {drawerOpen ? (
+        <div className="fixed inset-0 z-[70] lg:hidden" role="dialog" aria-modal="true" aria-label="Filters">
+          <div className="absolute inset-0 bg-overlay" onClick={() => setDrawerOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col rounded-t-2xl border-t border-line bg-surface shadow-pop">
+            <div className="flex items-center justify-between border-b border-line px-4 py-3">
+              <h2 className="font-semibold">Filters</h2>
+              <button type="button" className="btn-ghost -mr-2 px-2" onClick={() => setDrawerOpen(false)} aria-label="Close filters">
+                <XIcon />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4">{panel}</div>
+            <div className="border-t border-line p-3">
+              <button type="button" className="btn-primary w-full" onClick={() => setDrawerOpen(false)}>
+                Show {total.toLocaleString("en-US")} {total === 1 ? "car" : "cars"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2,7 +2,28 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
-import { geocodeZip } from "../../../lib/location";
+import { lookupZip } from "../../../lib/location";
+import { imageUrl as publicImageUrl } from "../../../lib/images";
+import { useExtendedSpecs } from "../../../lib/features";
+import { useMakes, useModels } from "../../../hooks/useVehicleData";
+import { fetchComps } from "../../../lib/comps";
+import { formatPrice } from "../../../lib/format";
+import { summarizeComps } from "../../../lib/priceCheck";
+import {
+  BODY_TYPES,
+  COLORS,
+  CURRENT_YEAR,
+  DRIVETRAINS,
+  FUEL_TYPES,
+  MIN_YEAR,
+  TITLE_STATUSES,
+  TRANSMISSIONS,
+} from "../../../lib/specs";
+import {
+  decodeVin,
+  isValidVinFormat,
+  normalizeVin,
+} from "../../../lib/vehicle";
 
 type Mode = "create" | "edit";
 
@@ -26,6 +47,13 @@ export type ListingRow = {
   lat?: number | null;
   lng?: number | null;
 
+  vin?: string | null;
+  trim?: string | null;
+  body_type?: string | null;
+  drivetrain?: string | null;
+  exterior_color?: string | null;
+  title_status?: string | null;
+
   created_at?: string;
 };
 
@@ -46,6 +74,12 @@ type Props = {
 };
 
 type FormState = {
+  vin: string;
+  trim: string;
+  body_type: string;
+  drivetrain: string;
+  exterior_color: string;
+  title_status: string;
   make: string;
   model: string;
   zip_code: string;
@@ -64,7 +98,7 @@ const BUCKET = "car-images";
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
 
-function toStr(v: any) {
+function toStr(v: unknown) {
   return v === null || v === undefined ? "" : String(v);
 }
 
@@ -98,10 +132,7 @@ function buildObjectPath(listingId: string, ext: string) {
   return `listings/${listingId}/${uuidLike()}.${ext}`;
 }
 
-function publicUrl(bucket: string, path: string) {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
-}
+const publicUrl = publicImageUrl;
 
 async function fetchListingImages(listingId: string) {
   const { data, error } = await supabase
@@ -206,7 +237,7 @@ function Field({
 }) {
   return (
     <div>
-      <div className="text-xs text-slate-400 mb-1">{label}</div>
+      <div className="text-xs text-subtle mb-1">{label}</div>
       {children}
     </div>
   );
@@ -224,9 +255,15 @@ export function ListingForm({
 
   const defaults: FormState = useMemo(
     () => ({
+      vin: toStr(initial?.vin),
+      trim: toStr(initial?.trim),
+      body_type: toStr(initial?.body_type),
+      drivetrain: toStr(initial?.drivetrain),
+      exterior_color: toStr(initial?.exterior_color),
+      title_status: toStr(initial?.title_status),
       make: toStr(initial?.make),
       model: toStr(initial?.model),
-      zip_code: toStr((initial as any)?.zip_code),
+      zip_code: toStr(initial?.zip_code),
       year: toStr(initial?.year),
       price: toStr(initial?.price),
       mileage: toStr(initial?.mileage),
@@ -253,7 +290,9 @@ export function ListingForm({
   );
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
-  useEffect(() => setForm(defaults), [defaults]);
+  useEffect(() => {
+    setForm(defaults);
+  }, [defaults]);
 
   // Load existing images in edit mode
   const imagesQuery = useQuery({
@@ -269,39 +308,69 @@ export function ListingForm({
     }
   }, [imagesQuery.data]);
 
-  // Catalog (optional): brands + models from the DB
-  const brandsQuery = useQuery({
-    queryKey: ["brands"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("brands")
-        .select("id, name")
-        .order("name", { ascending: true });
-      if (error) return [];
-      return (data ?? []) as Array<{ id: string; name: string }>;
-    },
-    staleTime: 1000 * 60 * 10,
-  });
+  const extended = useExtendedSpecs();
+  const { makes, isLoading: makesLoading, failed: makesFailed } = useMakes();
+  const yearNum = Number(form.year);
+  const yearValid = Number.isInteger(yearNum) && yearNum >= MIN_YEAR && yearNum <= CURRENT_YEAR + 1;
+  const { models, isLoading: modelsLoading } = useModels(form.make, yearValid ? yearNum : undefined);
 
-  const selectedBrandId = useMemo(() => {
-    const b = (brandsQuery.data ?? []).find((x) => x.name === form.make);
-    return b?.id ?? null;
-  }, [brandsQuery.data, form.make]);
+  const [vinStatus, setVinStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "ok"; message: string }
+    | { kind: "warn"; message: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
 
-  const modelsQuery = useQuery({
-    queryKey: ["models", selectedBrandId],
-    enabled: !!selectedBrandId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("models")
-        .select("id, name")
-        .eq("brand_id", selectedBrandId!)
-        .order("name", { ascending: true });
-      if (error) return [];
-      return (data ?? []) as Array<{ id: string; name: string }>;
-    },
-    staleTime: 1000 * 60 * 10,
+  const runVinDecode = async () => {
+    const vin = normalizeVin(form.vin);
+    if (!isValidVinFormat(vin)) {
+      setVinStatus({
+        kind: "error",
+        message: "A VIN is 17 characters (letters and digits, no I, O or Q).",
+      });
+      return;
+    }
+    setVinStatus({ kind: "loading" });
+    try {
+      const d = await decodeVin(vin);
+      if (!d) {
+        setVinStatus({ kind: "error", message: "We couldn’t decode that VIN. You can still fill in the details by hand." });
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        vin: d.vin,
+        year: d.year ? String(d.year) : f.year,
+        make: d.make || f.make,
+        model: d.model || f.model,
+        trim: d.trim || f.trim,
+        body_type: d.bodyType || f.body_type,
+        drivetrain: d.drivetrain || f.drivetrain,
+        fuel_type: d.fuelType || f.fuel_type,
+        transmission: d.transmission || f.transmission,
+      }));
+      const summary = [d.year, d.make, d.model, d.trim].filter(Boolean).join(" ");
+      setVinStatus(
+        d.checkDigitOk
+          ? { kind: "ok", message: `Filled in from VIN: ${summary}${d.engine ? ` · ${d.engine}` : ""}. Check the details below.` }
+          : { kind: "warn", message: `Filled in from VIN: ${summary}. The VIN’s check digit doesn’t match — double-check that you typed it correctly.` },
+      );
+    } catch {
+      setVinStatus({ kind: "error", message: "VIN lookup is unavailable right now. You can still fill in the details by hand." });
+    }
+  };
+
+  // Live "what do similar cars cost" hint for the seller.
+  const comps = useQuery({
+    queryKey: ["form-comps", form.make.toLowerCase(), form.model.toLowerCase(), yearNum, listingId ?? null],
+    enabled: !!form.make.trim() && !!form.model.trim() && yearValid,
+    staleTime: 60_000,
+    queryFn: () => fetchComps({ make: form.make.trim(), model: form.model.trim(), year: yearNum, excludeId: listingId }),
   });
+  const priceHint = comps.data
+    ? summarizeComps(comps.data, { mileage: isIntString(form.mileage) ? Number(form.mileage) : null })
+    : null;
 
   const visibleExisting = useMemo(
     () => existingImages.filter((img) => !deletedImageIds.has(img.id)),
@@ -330,6 +399,10 @@ export function ListingForm({
       return "Price must be a number.";
     if (!form.mileage.trim() || !isIntString(form.mileage))
       return "Mileage must be a whole number.";
+    if (yearNum < MIN_YEAR || yearNum > CURRENT_YEAR + 1)
+      return `Year must be between ${MIN_YEAR} and ${CURRENT_YEAR + 1}.`;
+    if (extended && form.vin.trim() && !isValidVinFormat(normalizeVin(form.vin)))
+      return "VIN must be 17 characters (no I, O or Q), or leave it blank.";
     if (!form.fuel_type.trim()) return "Fuel type is required.";
     if (!form.transmission.trim()) return "Transmission is required.";
     if (isEdit && !listingId) return "Missing listing id for edit.";
@@ -396,9 +469,25 @@ export function ListingForm({
       // Listing payload
       // Location: store ZIP + precomputed lat/lng for fast radius search
       const zip = form.zip_code.trim();
-      const ll = zip ? await geocodeZip(zip) : null;
+      const ll = zip ? await lookupZip(zip) : null;
+      if (zip && !ll)
+        throw new Error("We couldn’t find that ZIP code. Check it, or clear the field.");
+
+      const specs = extended
+        ? {
+            vin: form.vin.trim() ? normalizeVin(form.vin) : null,
+            trim: form.trim.trim() || null,
+            body_type: form.body_type || null,
+            drivetrain: form.drivetrain || null,
+            exterior_color: form.exterior_color || null,
+            title_status: form.title_status || null,
+            city: ll?.city ?? null,
+            state: ll?.state ?? null,
+          }
+        : {};
 
       const payload = {
+        ...specs,
         make: form.make.trim(),
         model: form.model.trim(),
         zip_code: zip || null,
@@ -497,8 +586,13 @@ export function ListingForm({
       if (res.mode === "create") onCreated?.(res.id);
       else onSaved?.();
     },
-    onError: (err: any) => {
-      setErrorMsg(err?.message ?? "Save failed.");
+    onError: (err: unknown) => {
+      const e = err as { code?: string; message?: string } | null;
+      if (e?.code === "23505" && /vin/i.test(e.message ?? "")) {
+        setErrorMsg("An active listing with this VIN already exists.");
+        return;
+      }
+      setErrorMsg(e?.message ?? "Save failed.");
     },
   });
 
@@ -515,13 +609,13 @@ export function ListingForm({
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+      <div className="rounded-2xl border border-line bg-surface p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold">
               {isEdit ? "Edit Listing" : "Create Listing"}
             </h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="text-sm text-subtle mt-1">
               {isEdit
                 ? "Update details and manage images."
                 : "Enter details, choose images, then save."}
@@ -530,7 +624,7 @@ export function ListingForm({
 
           <button
             type="button"
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg disabled:opacity-50"
             disabled={mutation.isPending}
             onClick={() => mutation.mutate()}
           >
@@ -539,93 +633,144 @@ export function ListingForm({
         </div>
 
         {errorMsg ? (
-          <div className="mt-4 text-sm text-red-300">{errorMsg}</div>
+          <div className="mt-4 text-sm text-danger">{errorMsg}</div>
         ) : null}
 
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Make">
-            {(brandsQuery.data ?? []).length ? (
-              <select
-                className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
-                value={form.make}
-                onChange={(e) =>
-                  setForm({ ...form, make: e.target.value, model: "" })
+        <div className="mt-6 rounded-xl border border-line bg-surface-2 p-4">
+          <label htmlFor="vin" className="text-sm font-semibold">Start with the VIN (optional)</label>
+          <p className="mt-0.5 text-xs text-subtle">
+            We’ll fill in year, make, model, trim and specs from NHTSA’s database.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input
+              id="vin"
+              className="input min-w-[16rem] flex-1 font-mono uppercase tracking-wider"
+              value={form.vin}
+              maxLength={20}
+              autoCapitalize="characters"
+              spellCheck={false}
+              placeholder="17-character VIN"
+              onChange={(e) => {
+                setForm({ ...form, vin: e.target.value });
+                if (vinStatus.kind !== "idle") setVinStatus({ kind: "idle" });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void runVinDecode();
                 }
-              >
-                <option value="">Select…</option>
-                {(brandsQuery.data ?? []).map((b) => (
-                  <option key={b.id} value={b.name}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              }}
+            />
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={vinStatus.kind === "loading" || !form.vin.trim()}
+              onClick={() => void runVinDecode()}
+            >
+              {vinStatus.kind === "loading" ? "Decoding…" : "Decode VIN"}
+            </button>
+          </div>
+          {vinStatus.kind === "ok" ? (
+            <p role="status" className="mt-2 text-sm text-success">{vinStatus.message}</p>
+          ) : vinStatus.kind === "warn" ? (
+            <p role="status" className="mt-2 text-sm text-warn">{vinStatus.message}</p>
+          ) : vinStatus.kind === "error" ? (
+            <p role="alert" className="mt-2 text-sm text-danger">{vinStatus.message}</p>
+          ) : null}
+          {!extended && form.vin.trim() ? (
+            <p className="mt-2 text-xs text-subtle">The VIN fills in the form but isn’t saved until the database update is applied.</p>
+          ) : null}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Year">
+            <input
+              className="input"
+              value={form.year}
+              onChange={(e) => setForm({ ...form, year: e.target.value.replace(/\D/g, "").slice(0, 4), model: "" })}
+              inputMode="numeric"
+              placeholder={`e.g., ${CURRENT_YEAR - 5}`}
+            />
+          </Field>
+
+          <Field label="Make">
+            {makesFailed ? (
+              <input className="input" value={form.make} onChange={(e) => setForm({ ...form, make: e.target.value })} placeholder="e.g., Toyota" />
             ) : (
-              <input
-                className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
+              <select
+                className="input"
                 value={form.make}
-                onChange={(e) => setForm({ ...form, make: e.target.value })}
-                placeholder="e.g., Toyota"
-              />
+                disabled={makesLoading}
+                onChange={(e) => setForm({ ...form, make: e.target.value, model: "" })}
+              >
+                <option value="">{makesLoading ? "Loading makes…" : "Select…"}</option>
+                {form.make && ![...makes.popular, ...makes.all].some((m) => m.toLowerCase() === form.make.toLowerCase()) ? (
+                  <option value={form.make}>{form.make}</option>
+                ) : null}
+                <optgroup label="Popular">
+                  {makes.popular.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </optgroup>
+                {makes.all.length ? (
+                  <optgroup label="All makes">
+                    {makes.all.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </select>
             )}
           </Field>
 
           <Field label="Model">
-            {(modelsQuery.data ?? []).length ? (
+            {models.length || modelsLoading ? (
               <select
-                className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
+                className="input"
                 value={form.model}
+                disabled={!form.make || modelsLoading}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
               >
-                <option value="">Select…</option>
-                {(modelsQuery.data ?? []).map((m) => (
-                  <option key={m.id} value={m.name}>
-                    {m.name}
-                  </option>
+                <option value="">{!form.make ? "Choose a make first" : modelsLoading ? "Loading models…" : "Select…"}</option>
+                {form.model && !models.some((m) => m.toLowerCase() === form.model.toLowerCase()) ? (
+                  <option value={form.model}>{form.model}</option>
+                ) : null}
+                {models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
                 ))}
               </select>
             ) : (
-              <input
-                className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
-                value={form.model}
-                onChange={(e) => setForm({ ...form, model: e.target.value })}
-                placeholder="e.g., Camry"
-              />
+              <input className="input" value={form.model} disabled={!form.make} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder={form.make ? "e.g., Camry" : "Choose a make first"} />
             )}
           </Field>
 
-          <Field label="ZIP Code">
-            <input
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
-              value={form.zip_code}
-              onChange={(e) => setForm({ ...form, zip_code: e.target.value })}
-              inputMode="numeric"
-              placeholder="e.g., 10001"
-            />
-          </Field>
-
-          <Field label="Year">
-            <input
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
-              value={form.year}
-              onChange={(e) => setForm({ ...form, year: e.target.value })}
-              inputMode="numeric"
-              placeholder="e.g., 2020"
-            />
-          </Field>
+          {extended ? (
+            <Field label="Trim (optional)">
+              <input className="input" value={form.trim} onChange={(e) => setForm({ ...form, trim: e.target.value })} placeholder="e.g., SE, Sport, Limited" />
+            </Field>
+          ) : null}
 
           <Field label="Price">
             <input
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
+              className="input"
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
               inputMode="decimal"
               placeholder="e.g., 18500"
             />
+            {priceHint ? (
+              <p className="mt-1 text-xs text-subtle">
+                Similar cars on Car Market are listed for {formatPrice(priceHint.low)}–{formatPrice(priceHint.high)}{" "}
+                (median {formatPrice(priceHint.median)}, {priceHint.count} listings).
+              </p>
+            ) : comps.isSuccess ? (
+              <p className="mt-1 text-xs text-subtle">Not enough similar listings yet for a price suggestion.</p>
+            ) : null}
           </Field>
 
           <Field label="Mileage">
             <input
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
+              className="input"
               value={form.mileage}
               onChange={(e) => setForm({ ...form, mileage: e.target.value })}
               inputMode="numeric"
@@ -633,44 +778,80 @@ export function ListingForm({
             />
           </Field>
 
+          <Field label="ZIP Code">
+            <input
+              className="input"
+              value={form.zip_code}
+              onChange={(e) => setForm({ ...form, zip_code: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+              inputMode="numeric"
+              placeholder="e.g., 10001"
+            />
+          </Field>
+
+          {extended ? (
+            <Field label="Body type">
+              <select className="input" value={form.body_type} onChange={(e) => setForm({ ...form, body_type: e.target.value })}>
+                <option value="">Select…</option>
+                {BODY_TYPES.map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+
           <Field label="Fuel Type">
-            <select
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
-              value={form.fuel_type}
-              onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}
-            >
+            <select className="input" value={form.fuel_type} onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}>
               <option value="">Select…</option>
-              <option value="Gasoline">Gasoline</option>
-              <option value="Diesel">Diesel</option>
-              <option value="Hybrid">Hybrid</option>
-              <option value="Electric">Electric</option>
+              {FUEL_TYPES.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
             </select>
           </Field>
 
           <Field label="Transmission">
-            <select
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white"
-              value={form.transmission}
-              onChange={(e) =>
-                setForm({ ...form, transmission: e.target.value })
-              }
-            >
+            <select className="input" value={form.transmission} onChange={(e) => setForm({ ...form, transmission: e.target.value })}>
               <option value="">Select…</option>
-              <option value="Automatic">Automatic</option>
-              <option value="Manual">Manual</option>
-              <option value="CVT">CVT</option>
-              <option value="DCT">DCT</option>
+              {TRANSMISSIONS.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
             </select>
           </Field>
 
+          {extended ? (
+            <>
+              <Field label="Drivetrain">
+                <select className="input" value={form.drivetrain} onChange={(e) => setForm({ ...form, drivetrain: e.target.value })}>
+                  <option value="">Select…</option>
+                  {DRIVETRAINS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Exterior color">
+                <select className="input" value={form.exterior_color} onChange={(e) => setForm({ ...form, exterior_color: e.target.value })}>
+                  <option value="">Select…</option>
+                  {COLORS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Title status">
+                <select className="input" value={form.title_status} onChange={(e) => setForm({ ...form, title_status: e.target.value })}>
+                  <option value="">Select…</option>
+                  {TITLE_STATUSES.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          ) : null}
+
           <Field label="Active">
-            <label className="flex items-center gap-2 text-slate-200">
+            <label className="flex items-center gap-2 text-fg">
               <input
                 type="checkbox"
                 checked={form.is_active}
-                onChange={(e) =>
-                  setForm({ ...form, is_active: e.target.checked })
-                }
+                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
               />
               Visible in marketplace
             </label>
@@ -680,7 +861,7 @@ export function ListingForm({
         <div className="mt-4">
           <Field label="Description (optional)">
             <textarea
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-white min-h-[120px]"
+              className="input min-h-[120px]"
               value={form.description}
               onChange={(e) =>
                 setForm({ ...form, description: e.target.value })
@@ -691,17 +872,17 @@ export function ListingForm({
         </div>
 
         {/* Images */}
-        <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+        <div className="mt-6 rounded-2xl border border-line bg-surface p-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <div className="font-medium">Images</div>
-              <div className="text-sm text-slate-400">
+              <div className="text-sm text-subtle">
                 JPG/PNG/WebP only. Images upload when you click{" "}
-                <span className="text-slate-200">Save</span>.
+                <span className="text-fg">Save</span>.
               </div>
             </div>
 
-            <label className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer">
+            <label className="px-3 py-2 rounded-lg bg-surface-2 hover:bg-surface-3 cursor-pointer">
               Add images
               <input
                 type="file"
@@ -717,13 +898,13 @@ export function ListingForm({
           {isEdit ? (
             <div className="mt-4">
               {imagesQuery.isLoading ? (
-                <div className="text-sm text-slate-400">Loading images…</div>
+                <div className="text-sm text-subtle">Loading images…</div>
               ) : existingDisplay.length ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {existingDisplay.map((img, idx) => (
                     <div
                       key={img.id}
-                      className="rounded-xl border border-slate-800 p-2"
+                      className="rounded-xl border border-line p-2"
                     >
                       <img
                         src={img.url}
@@ -731,13 +912,13 @@ export function ListingForm({
                         alt=""
                       />
                       <div className="mt-2 flex items-center justify-between gap-2">
-                        <div className="text-xs text-slate-400">
+                        <div className="text-xs text-subtle">
                           {img.label}
                         </div>
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50"
+                            className="text-xs px-2 py-1 rounded bg-surface-2 hover:bg-surface-3 disabled:opacity-50"
                             onClick={() => moveExisting(idx, idx - 1)}
                             disabled={idx === 0}
                           >
@@ -745,7 +926,7 @@ export function ListingForm({
                           </button>
                           <button
                             type="button"
-                            className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50"
+                            className="text-xs px-2 py-1 rounded bg-surface-2 hover:bg-surface-3 disabled:opacity-50"
                             onClick={() => moveExisting(idx, idx + 1)}
                             disabled={idx === existingDisplay.length - 1}
                           >
@@ -753,7 +934,7 @@ export function ListingForm({
                           </button>
                           <button
                             type="button"
-                            className="text-xs px-2 py-1 rounded bg-red-600/80 hover:bg-red-600"
+                            className="text-xs px-2 py-1 rounded bg-danger-solid hover:opacity-90 text-fg"
                             onClick={() => markExistingDeleted(img.id)}
                           >
                             Remove
@@ -764,7 +945,7 @@ export function ListingForm({
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-slate-400">No images yet.</div>
+                <div className="text-sm text-subtle">No images yet.</div>
               )}
             </div>
           ) : null}
@@ -773,14 +954,14 @@ export function ListingForm({
           <div className="mt-4">
             {previewPending.length ? (
               <>
-                <div className="text-sm text-slate-300 mb-2">
+                <div className="text-sm text-muted mb-2">
                   Ready to upload ({previewPending.length})
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {previewPending.map((p, idx) => (
                     <div
                       key={`${p.file.name}-${idx}`}
-                      className="rounded-xl border border-slate-800 p-2"
+                      className="rounded-xl border border-line p-2"
                     >
                       <img
                         src={p.url}
@@ -788,7 +969,7 @@ export function ListingForm({
                         alt=""
                       />
                       <div className="mt-2 flex items-center justify-between gap-2">
-                        <div className="text-xs text-slate-400">
+                        <div className="text-xs text-subtle">
                           {idx === 0 && !isEdit && !existingDisplay.length
                             ? "Cover"
                             : `+${idx + 1}`}
@@ -796,7 +977,7 @@ export function ListingForm({
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50"
+                            className="text-xs px-2 py-1 rounded bg-surface-2 hover:bg-surface-3 disabled:opacity-50"
                             onClick={() => movePending(idx, idx - 1)}
                             disabled={idx === 0}
                           >
@@ -804,7 +985,7 @@ export function ListingForm({
                           </button>
                           <button
                             type="button"
-                            className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50"
+                            className="text-xs px-2 py-1 rounded bg-surface-2 hover:bg-surface-3 disabled:opacity-50"
                             onClick={() => movePending(idx, idx + 1)}
                             disabled={idx === previewPending.length - 1}
                           >
@@ -812,26 +993,26 @@ export function ListingForm({
                           </button>
                           <button
                             type="button"
-                            className="text-xs px-2 py-1 rounded bg-red-600/80 hover:bg-red-600"
+                            className="text-xs px-2 py-1 rounded bg-danger-solid hover:opacity-90 text-fg"
                             onClick={() => removePendingAt(idx)}
                           >
                             Remove
                           </button>
                         </div>
                       </div>
-                      <div className="mt-1 text-[11px] text-slate-500 truncate">
+                      <div className="mt-1 text-[11px] text-subtle truncate">
                         {p.file.name}
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-2 text-xs text-slate-400">
+                <div className="mt-2 text-xs text-subtle">
                   Tip: the first image becomes the cover (after
                   deletions/reorder), then the rest follow.
                 </div>
               </>
             ) : (
-              <div className="text-sm text-slate-400">
+              <div className="text-sm text-subtle">
                 No new images selected.
               </div>
             )}

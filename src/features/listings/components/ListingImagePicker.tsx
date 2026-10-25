@@ -39,16 +39,16 @@ export function ListingImagePicker({ files, onChange }: Props) {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+    <div className="rounded-2xl border border-line bg-surface p-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="font-medium">Photos</div>
-          <div className="text-sm text-slate-400">
+          <div className="text-sm text-subtle">
             Add images now; they’ll upload when you save the listing.
           </div>
         </div>
 
-        <label className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer">
+        <label className="px-3 py-2 rounded-lg bg-surface-2 hover:bg-surface-3 cursor-pointer">
           Add images
           <input
             type="file"
@@ -63,20 +63,20 @@ export function ListingImagePicker({ files, onChange }: Props) {
       {previews.length ? (
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
           {previews.map((p, idx) => (
-            <div key={idx} className="rounded-xl border border-slate-800 p-2">
+            <div key={idx} className="rounded-xl border border-line p-2">
               <img
                 src={p.url}
                 className="w-full h-32 object-cover rounded-lg"
                 alt=""
               />
               <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-subtle">
                   {idx === 0 ? "Cover" : `#${idx + 1}`}
                 </div>
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700"
+                    className="text-xs px-2 py-1 rounded bg-surface-2 hover:bg-surface-3"
                     onClick={() => move(idx, idx - 1)}
                     disabled={idx === 0}
                   >
@@ -84,7 +84,7 @@ export function ListingImagePicker({ files, onChange }: Props) {
                   </button>
                   <button
                     type="button"
-                    className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700"
+                    className="text-xs px-2 py-1 rounded bg-surface-2 hover:bg-surface-3"
                     onClick={() => move(idx, idx + 1)}
                     disabled={idx === previews.length - 1}
                   >
@@ -92,7 +92,7 @@ export function ListingImagePicker({ files, onChange }: Props) {
                   </button>
                   <button
                     type="button"
-                    className="text-xs px-2 py-1 rounded bg-red-600/80 hover:bg-red-600"
+                    className="text-xs px-2 py-1 rounded bg-danger-solid hover:opacity-90 text-fg"
                     onClick={() => removeAt(idx)}
                   >
                     Remove
@@ -103,7 +103,7 @@ export function ListingImagePicker({ files, onChange }: Props) {
           ))}
         </div>
       ) : (
-        <div className="mt-4 text-sm text-slate-400">No images selected.</div>
+        <div className="mt-4 text-sm text-subtle">No images selected.</div>
       )}
     </div>
   );
