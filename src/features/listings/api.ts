@@ -142,6 +142,16 @@ export async function fetchLatest(limit: number, featuredOnly: boolean): Promise
   return (data ?? []) as Listing[];
 }
 
+/** Number of active listings (head-only count, no rows). */
+export async function fetchActiveCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from("listings")
+    .select("id", { count: "exact", head: true })
+    .eq("is_active", true);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function fetchSimilar(l: Listing, limit = 4): Promise<Listing[]> {
   // Same make first; pad with the same price band if there aren't enough.
   const select = "*, listing_images(bucket, path, position)";

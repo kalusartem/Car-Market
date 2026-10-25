@@ -10,6 +10,7 @@ import {
   timeAgo,
 } from "../../../lib/format";
 import { HeartIcon, ImageIcon, PinIcon } from "../../../components/icons";
+import { ResizedImage } from "../../../components/ResizedImage";
 
 type Props = {
   listing: Listing;
@@ -21,6 +22,7 @@ type Props = {
 
 export function ListingCard({ listing: l, saved, onToggleSave, distance }: Props) {
   const cover = getCoverUrl(l);
+  const thumb = getCoverUrl(l, 800);
   const place = listingLocation(l);
   const title = `${l.year ?? ""} ${l.make} ${l.model}`.trim();
 
@@ -32,9 +34,10 @@ export function ListingCard({ listing: l, saved, onToggleSave, distance }: Props
         aria-label={`${title}, ${formatPrice(l.price)}`}
       >
         <div className="relative aspect-[4/3] overflow-hidden bg-surface-3">
-          {cover ? (
-            <img
-              src={cover}
+          {cover && thumb ? (
+            <ResizedImage
+              src={thumb}
+              fallback={cover}
               alt=""
               loading="lazy"
               decoding="async"
