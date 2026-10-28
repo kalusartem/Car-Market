@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../../lib/supabase";
 import { lookupZip } from "../../../lib/location";
 import { imageUrl as publicImageUrl } from "../../../lib/images";
-import { useExtendedSpecs } from "../../../lib/features";
+import { useExtendedSpecs, useListingReview } from "../../../lib/features";
+import { requestReviewEmail } from "../../../lib/review";
+import type { Listing } from "../../../types/car";
 import { useMakes, useModels } from "../../../hooks/useVehicleData";
 import { fetchComps } from "../../../lib/comps";
 import { formatPrice } from "../../../lib/format";
@@ -279,6 +281,7 @@ export function ListingForm({
 
   const [form, setForm] = useState<FormState>(defaults);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   // Images state:
   // - existingImages: DB rows from listing_images
@@ -309,6 +312,7 @@ export function ListingForm({
   }, [imagesQuery.data]);
 
   const extended = useExtendedSpecs();
+  const review = useListingReview();
   const { makes, isLoading: makesLoading, failed: makesFailed } = useMakes();
   const yearNum = Number(form.year);
   const yearValid = Number.isInteger(yearNum) && yearNum >= MIN_YEAR && yearNum <= CURRENT_YEAR + 1;
@@ -459,9 +463,19 @@ export function ListingForm({
     });
   };
 
+  /** After a save, a pending listing (new, or edited enough to need another look) emails the admin. */
+  const reviewStatusAfterSave = async (id: string) => {
+    if (!review) return null;
+    const { data } = await supabase.from("listings").select("*").eq("id", id).maybeSingle();
+    const status = (data as Listing | null)?.status ?? null;
+    if (status === "pending") void requestReviewEmail(id);
+    return status;
+  };
+
   const mutation = useMutation({
     mutationFn: async () => {
       setErrorMsg(null);
+      setSavedMsg(null);
 
       const v = validate();
       if (v) throw new Error(v);
@@ -527,7 +541,7 @@ export function ListingForm({
           await uploadFilesAndInsertRows(newId, pendingFiles, 0);
         }
 
-        return { id: newId, mode: "create" as const };
+        return { id: newId, mode: "create" as const, status: await reviewStatusAfterSave(newId) };
       }
 
       // Edit
@@ -571,17 +585,26 @@ export function ListingForm({
         await uploadFilesAndInsertRows(listingId!, pendingFiles, startPos);
       }
 
-      return { id: listingId!, mode: "edit" as const };
+      return { id: listingId!, mode: "edit" as const, status: await reviewStatusAfterSave(listingId!) };
     },
     onSuccess: async (res) => {
       // clear local image state
       setPendingFiles([]);
       setDeletedImageIds(new Set());
+      if (res.mode === "edit") {
+        setSavedMsg(
+          res.status === "pending"
+            ? "Saved. An admin will review the changes before they go live."
+            : "Saved.",
+        );
+      }
 
       // refresh cache
       await qc.invalidateQueries({ queryKey: ["listing-images", res.id] });
       await qc.invalidateQueries({ queryKey: ["listing-edit", res.id] });
       await qc.invalidateQueries({ queryKey: ["my-listings"] });
+      await qc.invalidateQueries({ queryKey: ["listing", res.id] });
+      await qc.invalidateQueries({ queryKey: ["review-queue"] });
 
       if (res.mode === "create") onCreated?.(res.id);
       else onSaved?.();
@@ -634,6 +657,15 @@ export function ListingForm({
 
         {errorMsg ? (
           <div className="mt-4 text-sm text-danger">{errorMsg}</div>
+        ) : null}
+        {savedMsg ? (
+          <div role="status" className="mt-4 text-sm text-success">{savedMsg}</div>
+        ) : null}
+        {review ? (
+          <p className="mt-4 text-sm text-subtle">
+            Listings appear in the marketplace once an admin approves them. Changing the details or adding
+            photos sends a listing back for review.
+          </p>
         ) : null}
 
         <div className="mt-6 rounded-xl border border-line bg-surface-2 p-4">

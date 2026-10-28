@@ -55,6 +55,11 @@ const MyListingsPage = lazy(() =>
     default: m.MyListingsPage,
   })),
 );
+const ReviewListingsPage = lazy(() =>
+  import("./features/admin/pages/ReviewListingsPage").then((m) => ({
+    default: m.ReviewListingsPage,
+  })),
+);
 const InboxPage = lazy(() =>
   import("./features/messages/pages/InboxPage").then((m) => ({
     default: m.InboxPage,
@@ -146,6 +151,7 @@ export default function App() {
                 path="/account/listings"
                 element={guard(<MyListingsPage />)}
               />
+              <Route path="/admin" element={guard(<ReviewListingsPage />)} />
               <Route path="/messages" element={guard(<InboxPage />)} />
               <Route
                 path="/messages/:listingId/:buyerId"

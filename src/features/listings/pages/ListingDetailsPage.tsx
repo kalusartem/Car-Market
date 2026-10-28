@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageMeta } from "../../../hooks/usePageMeta";
 import { useAuthUser } from "../../../lib/auth";
 import { fetchIsAdmin } from "../../../lib/admin";
+import { errorMessage } from "../../../lib/errors";
 import {
   formatDate,
   formatMileage,
@@ -16,6 +17,7 @@ import {
 } from "../../../lib/format";
 import { imageUrl } from "../../../lib/images";
 import { listingJsonLd, seoDescription } from "../../../lib/listingSeo";
+import { askRejectReason, reviewListing } from "../../../lib/review";
 import { supabase } from "../../../lib/supabase";
 import type { Listing } from "../../../types/car";
 import { HeartIcon, PinIcon, ShareIcon, UserIcon } from "../../../components/icons";
@@ -45,6 +47,51 @@ function Spec({ label, value }: { label: string; value: string | null | undefine
     <div className="rounded-xl border border-line bg-surface-2 p-3">
       <dt className="text-xs text-subtle">{label}</dt>
       <dd className="mt-0.5 break-words font-medium">{value}</dd>
+    </div>
+  );
+}
+
+/** Shown to the seller and admins while a listing isn't approved; admins can approve or reject from here. */
+function ReviewBanner({ listing, isAdmin }: { listing: Listing; isAdmin: boolean }) {
+  const qc = useQueryClient();
+  const decide = useMutation({
+    mutationFn: async (status: "approved" | "rejected") => {
+      const note = status === "rejected" ? askRejectReason() : null;
+      if (note === null && status === "rejected") return;
+      await reviewListing(listing.id, status, note);
+      await qc.invalidateQueries({ queryKey: ["listing", listing.id] });
+      await qc.invalidateQueries({ queryKey: ["review-queue"] });
+    },
+  });
+
+  const pending = listing.status === "pending";
+  if (!pending && listing.status !== "rejected") return null;
+
+  return (
+    <div
+      role="status"
+      className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+        pending ? "border-warn/40 bg-warn-bg text-warn" : "border-danger/40 bg-danger-bg text-danger"
+      }`}
+    >
+      <span>
+        {pending
+          ? "Waiting for approval. Only the seller and admins can see this listing until it’s approved."
+          : `Not approved${listing.review_note ? `: ${listing.review_note}` : ""}. Edit the listing to send it for review again.`}
+      </span>
+      {isAdmin ? (
+        <span className="flex gap-2">
+          <button type="button" className="btn-primary h-9" disabled={decide.isPending} onClick={() => decide.mutate("approved")}>
+            Approve
+          </button>
+          {pending ? (
+            <button type="button" className="btn-secondary h-9" disabled={decide.isPending} onClick={() => decide.mutate("rejected")}>
+              Reject
+            </button>
+          ) : null}
+        </span>
+      ) : null}
+      {decide.isError ? <span className="w-full">{errorMessage(decide.error, "Couldn’t save the decision.")}</span> : null}
     </div>
   );
 }
@@ -113,7 +160,7 @@ export function ListingDetailsPage() {
     canonicalPath: `/listings/${id}`,
     image: urls[0] ?? null,
     jsonLd: row ? listingJsonLd(row, url, urls.slice(0, 5)) : null,
-    noindex: row ? row.is_active === false : false,
+    noindex: row ? row.is_active === false || (row.status ?? "approved") !== "approved" : false,
   });
 
   const share = async () => {
@@ -180,6 +227,7 @@ export function ListingDetailsPage() {
         <Link to={`/cars/${slugify(row.make)}/${slugify(row.model)}`} className="hover:text-fg hover:underline">{row.model}</Link>
       </nav>
 
+      <ReviewBanner listing={row} isAdmin={!!isAdmin} />
       {row.is_active === false ? (
         <div role="status" className="mb-4 rounded-xl border border-warn/40 bg-warn-bg px-4 py-3 text-sm text-warn">
           This listing is hidden from the marketplace.

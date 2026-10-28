@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchIsAdmin } from "../lib/admin";
 import { supabase } from "../lib/supabase";
 import { useAuthUser } from "../lib/auth";
 import { UserIcon } from "./icons";
@@ -18,6 +19,13 @@ export function AccountMenu() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: user } = useAuthUser();
+  const { data: isAdmin } = useQuery({
+    queryKey: ["is-admin", user?.id ?? null],
+    queryFn: () => fetchIsAdmin(user?.id ?? null),
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const items: Array<[string, string]> = isAdmin ? [...ITEMS, ["/admin", "Review listings"]] : ITEMS;
 
   useEffect(() => {
     if (!open) return;
@@ -69,7 +77,7 @@ export function AccountMenu() {
           <div className="border-b border-line px-3 py-2 text-xs text-subtle">
             Signed in as <span className="block truncate font-medium text-fg">{label}</span>
           </div>
-          {ITEMS.map(([to, text]) => (
+          {items.map(([to, text]) => (
             <Link key={to} role="menuitem" to={to} className="block px-3 py-2 text-sm hover:bg-surface-2" onClick={() => setOpen(false)}>
               {text}
             </Link>

@@ -1,3 +1,4 @@
+import { listingReviewEnabled } from "../../lib/features";
 import { geocodeZip } from "../../lib/location";
 import { haversineMiles, nameLikePattern } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
@@ -8,11 +9,14 @@ export const PAGE_SIZE = 24;
 /** Radius search pulls candidates inside a bounding box and ranks them here. */
 const RADIUS_CANDIDATE_CAP = 500;
 
-const baseQuery = () =>
-  supabase
+/** Sellers and admins can also read pending / rejected listings; the marketplace shows approved ones only. */
+const baseQuery = (reviewed: boolean) => {
+  const q = supabase
     .from("listings")
     .select("*, listing_images(bucket, path, position)", { count: "exact" })
     .eq("is_active", true);
+  return reviewed ? q.eq("status", "approved") : q;
+};
 
 type ListingQuery = ReturnType<typeof baseQuery>;
 
@@ -73,6 +77,7 @@ export async function fetchListings(
   extended: boolean,
 ): Promise<ListingsResult> {
   let zipNotFound = false;
+  const reviewed = await listingReviewEnabled();
 
   if (f.zip && f.radius > 0) {
     const origin = await geocodeZip(f.zip);
@@ -82,7 +87,7 @@ export async function fetchListings(
       const dLat = f.radius / 69;
       const dLng = f.radius / (69 * Math.max(0.1, Math.cos((origin.lat * Math.PI) / 180)));
 
-      const q = applyFilters(baseQuery(), f, extended)
+      const q = applyFilters(baseQuery(reviewed), f, extended)
         .gte("lat", origin.lat - dLat)
         .lte("lat", origin.lat + dLat)
         .gte("lng", origin.lng - dLng)
@@ -121,7 +126,7 @@ export async function fetchListings(
 
   const from = (f.page - 1) * PAGE_SIZE;
   const sort = f.sort === "distance" ? "newest" : f.sort;
-  const { data, error, count } = await applySort(applyFilters(baseQuery(), f, extended), sort).range(
+  const { data, error, count } = await applySort(applyFilters(baseQuery(reviewed), f, extended), sort).range(
     from,
     from + PAGE_SIZE - 1,
   );
@@ -137,6 +142,7 @@ export async function fetchLatest(limit: number, featuredOnly: boolean): Promise
     .order("created_at", { ascending: false })
     .limit(limit);
   if (featuredOnly) q = q.eq("is_featured", true);
+  if (await listingReviewEnabled()) q = q.eq("status", "approved");
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as Listing[];
@@ -144,21 +150,21 @@ export async function fetchLatest(limit: number, featuredOnly: boolean): Promise
 
 /** Number of active listings (head-only count, no rows). */
 export async function fetchActiveCount(): Promise<number> {
-  const { count, error } = await supabase
-    .from("listings")
-    .select("id", { count: "exact", head: true })
-    .eq("is_active", true);
+  let q = supabase.from("listings").select("id", { count: "exact", head: true }).eq("is_active", true);
+  if (await listingReviewEnabled()) q = q.eq("status", "approved");
+  const { count, error } = await q;
   if (error) throw error;
   return count ?? 0;
 }
 
 export async function fetchSimilar(l: Listing, limit = 4): Promise<Listing[]> {
   // Same make first; pad with the same price band if there aren't enough.
-  const select = "*, listing_images(bucket, path, position)";
-  const { data: sameMake } = await supabase
-    .from("listings")
-    .select(select)
-    .eq("is_active", true)
+  const reviewed = await listingReviewEnabled();
+  const active = () => {
+    const q = supabase.from("listings").select("*, listing_images(bucket, path, position)").eq("is_active", true);
+    return reviewed ? q.eq("status", "approved") : q;
+  };
+  const { data: sameMake } = await active()
     .ilike("make", nameLikePattern(l.make))
     .neq("id", l.id)
     .order("created_at", { ascending: false })
@@ -168,10 +174,7 @@ export async function fetchSimilar(l: Listing, limit = 4): Promise<Listing[]> {
 
   const price = Number(l.price);
   if (!Number.isFinite(price)) return picked;
-  const { data: nearby } = await supabase
-    .from("listings")
-    .select(select)
-    .eq("is_active", true)
+  const { data: nearby } = await active()
     .gte("price", price * 0.75)
     .lte("price", price * 1.25)
     .neq("id", l.id)

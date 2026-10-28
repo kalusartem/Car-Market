@@ -33,5 +33,13 @@ export interface Listing {
   city?: string | null;
   state?: string | null;
 
+  // From supabase/migrations/20261027000000_listing_review.sql; absent before it's applied.
+  status?: ReviewStatus | null;
+  review_note?: string | null;
+  reviewed_at?: string | null;
+  submitted_at?: string | null;
+
   listing_images?: ListingImage[] | null;
 }
+
+export type ReviewStatus = "pending" | "approved" | "rejected";

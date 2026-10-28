@@ -1,3 +1,4 @@
+import { listingReviewEnabled } from "./features";
 import { nameLikePattern } from "./format";
 import type { Comp } from "./priceCheck";
 import { supabase } from "./supabase";
@@ -19,6 +20,7 @@ export async function fetchComps(args: {
     .lte("year", year + 2)
     .limit(200);
   if (excludeId) q = q.neq("id", excludeId);
+  if (await listingReviewEnabled()) q = q.eq("status", "approved");
 
   const { data, error } = await q;
   if (error) throw error;

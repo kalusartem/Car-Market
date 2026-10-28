@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePageMeta } from "../../../hooks/usePageMeta";
+import { listingReviewEnabled } from "../../../lib/features";
 import { formatDate } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
 import type { Listing } from "../../../types/car";
@@ -15,12 +16,13 @@ export function SellerPage() {
     queryKey: ["seller", id],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("listings")
         .select("*, listing_images(bucket, path, position)")
         .eq("seller_id", id!)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
+        .eq("is_active", true);
+      if (await listingReviewEnabled()) q = q.eq("status", "approved");
+      const { data, error } = await q.order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Listing[];
     },
