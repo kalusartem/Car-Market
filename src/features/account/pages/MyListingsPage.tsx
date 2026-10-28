@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../../../lib/supabase";
 import { useAuthUser } from "../../../lib/auth";
 import { errorMessage } from "../../../lib/errors";
+import { listingReviewEnabled } from "../../../lib/features";
 import { formatMileage, formatPrice, timeAgo } from "../../../lib/format";
 import { coverUrl } from "../../../lib/images";
 import { ImageIcon } from "../../../components/icons";
@@ -12,8 +13,18 @@ import type { Listing } from "../../../types/car";
 
 type MyListing = Pick<
   Listing,
-  "id" | "make" | "model" | "year" | "price" | "mileage" | "is_active" | "created_at" | "listing_images"
+  "id" | "make" | "model" | "year" | "price" | "mileage" | "is_active" | "created_at" | "listing_images" | "status" | "review_note"
 >;
+
+function StatusBadge({ listing }: { listing: MyListing }) {
+  if (listing.status === "pending") return <span className="badge bg-warn-bg text-warn">In review</span>;
+  if (listing.status === "rejected") return <span className="badge bg-danger-bg text-danger">Not approved</span>;
+  return (
+    <span className={`badge ${listing.is_active ? "bg-success-bg text-success" : "bg-surface-2 text-muted"}`}>
+      {listing.is_active ? "Active" : "Hidden"}
+    </span>
+  );
+}
 
 function Cover({ listing }: { listing: MyListing }) {
   const full = coverUrl(listing);
@@ -38,18 +49,19 @@ export function MyListingsPage() {
     queryKey: ["my-listings", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
+      const review = (await listingReviewEnabled()) ? ", status, review_note" : "";
       const { data, error } = await supabase
         .from("listings")
-        .select("id, make, model, year, price, mileage, is_active, created_at, listing_images(bucket, path, position)")
+        .select(`id, make, model, year, price, mileage, is_active, created_at${review}, listing_images(bucket, path, position)`)
         .eq("seller_id", user!.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return (data ?? []) as MyListing[];
+      return (data ?? []) as unknown as MyListing[];
     },
   });
 
-  const activeCount = (data ?? []).filter((l) => l.is_active).length;
+  const activeCount = (data ?? []).filter((l) => l.is_active && (l.status ?? "approved") === "approved").length;
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -94,9 +106,7 @@ export function MyListingsPage() {
                   <Link to={`/listings/${l.id}`} className="truncate text-lg font-semibold hover:underline">
                     {`${l.year ?? ""} ${l.make} ${l.model}`.trim()}
                   </Link>
-                  <span className={`badge ${l.is_active ? "bg-success-bg text-success" : "bg-surface-2 text-muted"}`}>
-                    {l.is_active ? "Active" : "Hidden"}
-                  </span>
+                  <StatusBadge listing={l} />
                 </div>
                 <p className="mt-1 text-sm text-muted">
                   <span className="font-semibold text-fg">{formatPrice(l.price)}</span>
@@ -104,6 +114,13 @@ export function MyListingsPage() {
                   {formatMileage(l.mileage)}
                 </p>
                 {l.created_at ? <p className="mt-1 text-xs text-subtle">Listed {timeAgo(l.created_at).toLowerCase()}</p> : null}
+                {l.status === "pending" ? (
+                  <p className="mt-1 text-xs text-subtle">Shows in the marketplace once an admin approves it.</p>
+                ) : l.status === "rejected" ? (
+                  <p className="mt-1 text-xs text-danger">
+                    {l.review_note ? `Reason: ${l.review_note}. ` : ""}Edit the listing to send it for review again.
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">

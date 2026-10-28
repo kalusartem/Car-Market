@@ -1,6 +1,7 @@
 // Self-hosted server for Car Market: serves the built SPA from dist/ and runs the same
 // SEO handlers as the Cloudflare Pages Functions in functions/ (listing and make/model
-// pages, sitemap.xml, robots.txt). Plain Node, no runtime dependencies.
+// pages, sitemap.xml, robots.txt), plus POST /api/listings/notify, which emails the admin
+// about listings waiting for approval. Plain Node, no runtime dependencies.
 //
 //   npm run build:all && npm start
 //
@@ -9,6 +10,8 @@
 //   SITE_URL   public origin, e.g. https://car-market.duckdns.org (used for canonical
 //              URLs and the sitemap; recommended behind a reverse proxy)
 //   PORT (8787), HOST (127.0.0.1), DIST_DIR (./dist)
+//   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, NOTIFY_TO, NOTIFY_FROM   approval emails
+//              (see functions/_mail.ts; without them the notice is only logged)
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile, stat } from "node:fs/promises";
@@ -18,6 +21,8 @@ import { onRequestGet as carsPage } from "../functions/cars/[[path]]";
 import { onRequestGet as sitemap } from "../functions/sitemap.xml";
 import { onRequestGet as robots } from "../functions/robots.txt";
 import type { Ctx, Env } from "../functions/_lib";
+import { notifyListingReview } from "../functions/_notify";
+import { connectNode } from "./smtp";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? "127.0.0.1";
@@ -81,7 +86,26 @@ const env: Env = {
   VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY,
   SUPABASE_URL: process.env.SUPABASE_URL,
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+  SMTP_HOST: process.env.SMTP_HOST,
+  SMTP_PORT: process.env.SMTP_PORT,
+  SMTP_USER: process.env.SMTP_USER,
+  SMTP_PASS: process.env.SMTP_PASS,
+  NOTIFY_TO: process.env.NOTIFY_TO,
+  NOTIFY_FROM: process.env.NOTIFY_FROM,
 };
+
+const MAX_BODY = 16 * 1024;
+
+async function readBody(req: IncomingMessage) {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_BODY) throw new Error("Body too large");
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
 
 function originOf(req: IncomingMessage) {
   if (SITE_URL) return SITE_URL;
@@ -92,11 +116,21 @@ function originOf(req: IncomingMessage) {
 
 async function route(req: IncomingMessage): Promise<Response> {
   const method = req.method ?? "GET";
+  const url = new URL(req.url ?? "/", originOf(req));
+
+  if (url.pathname === "/api/listings/notify") {
+    if (method !== "POST") return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
+    const body = await readBody(req).catch(() => null);
+    if (!body) return new Response("Payload too large", { status: 413 });
+    const headers = new Headers();
+    if (req.headers.authorization) headers.set("authorization", req.headers.authorization);
+    return notifyListingReview(new Request(url, { method, headers, body }), env, connectNode);
+  }
+
   if (method !== "GET" && method !== "HEAD") {
     return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
   }
 
-  const url = new URL(req.url ?? "/", originOf(req));
   const request = new Request(url, { method: "GET" });
   const ctx = (params: Ctx["params"] = {}): Ctx => ({ request, env, params });
   const p = url.pathname;

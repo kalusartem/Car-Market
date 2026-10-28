@@ -20,6 +20,23 @@ export function useExtendedSpecs() {
   return data ?? false;
 }
 
+let reviewProbe: Promise<boolean> | null = null;
+
+/** listings.status and friends: new and edited listings wait for an admin's approval. Probed once per page
+ *  load, so the list queries can await it too. */
+export function listingReviewEnabled() {
+  return (reviewProbe ??= probe("listings", "status"));
+}
+
+export function useListingReview() {
+  const { data } = useQuery({
+    queryKey: ["feature", "listing-review"],
+    queryFn: listingReviewEnabled,
+    staleTime: Infinity,
+  });
+  return data ?? false;
+}
+
 /** carmarket.listing_reports */
 export function useReportsEnabled() {
   const { data } = useQuery({

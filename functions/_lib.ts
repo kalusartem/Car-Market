@@ -12,13 +12,16 @@
 // every route falls back to the plain SPA shell.
 
 import { escapeHtml } from "../src/lib/listingSeo";
+import type { MailEnv } from "./_mail";
 
-export interface Env {
+export interface Env extends MailEnv {
   ASSETS: { fetch(input: Request | string | URL): Promise<Response> };
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
   VITE_SUPABASE_URL?: string;
   VITE_SUPABASE_ANON_KEY?: string;
+  /** Who gets the "listing waiting for approval" emails (functions/_notify.ts). */
+  NOTIFY_TO?: string;
 }
 
 export interface Ctx {

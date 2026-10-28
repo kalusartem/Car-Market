@@ -137,6 +137,13 @@ Database setup and dashboard settings: see [`supabase/README.md`](supabase/READM
 Build command `npm run build`, output `dist`. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as Pages variables:
 the `functions/` folder reads the same variables at runtime.
 
+New and edited listings wait for an admin's approval (`/admin`, linked from the account menu for admins), and
+`POST /api/listings/notify` emails the admin about each one. Set the SMTP settings as Pages secrets
+(`npx wrangler pages secret put SMTP_PASS --project-name <project>`, and the same for the others):
+`SMTP_HOST`, `SMTP_PORT` (465, implicit TLS), `SMTP_USER`, `SMTP_PASS`, plus optional `NOTIFY_TO`
+(defaults to kalusartem@gmail.com) and `NOTIFY_FROM` (a verified sender; defaults to `NOTIFY_TO`).
+Without them the notice is only logged.
+
 The app is a client-rendered SPA, so `functions/` returns the same `index.html` with real head tags and a plain-HTML summary for:
 
 | Route | Function |
@@ -145,6 +152,7 @@ The app is a client-rendered SPA, so `functions/` returns the same `index.html` 
 | `/cars/:make`, `/cars/:make/:model` | landing page with a list of crawlable links |
 | `/sitemap.xml` | static pages, make/model pages and every active listing |
 | `/robots.txt` | disallows private routes, points at the sitemap |
+| `POST /api/listings/notify` | emails the admin that a listing is waiting for approval |
 
 Test them locally with `npm run build && npx wrangler pages dev dist --binding VITE_SUPABASE_URL=... --binding VITE_SUPABASE_ANON_KEY=...`.
 

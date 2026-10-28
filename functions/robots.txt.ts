@@ -10,6 +10,7 @@ export const onRequestGet = ({ request }: Ctx) => {
     "Disallow: /favorites",
     "Disallow: /messages",
     "Disallow: /account",
+    "Disallow: /admin",
     "Disallow: /sellers/",
     "Disallow: /listings/*/edit",
     "",
