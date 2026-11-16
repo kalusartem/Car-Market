@@ -7,7 +7,7 @@
 //
 // Environment:
 //   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY   read at runtime for the SEO routes
-//   SITE_URL   public origin, e.g. https://car-market.duckdns.org (used for canonical
+//   SITE_URL   public origin, e.g. https://car-market.example.com (used for canonical
 //              URLs and the sitemap; recommended behind a reverse proxy)
 //   PORT (8787), HOST (127.0.0.1), DIST_DIR (./dist)
 //   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, NOTIFY_TO, NOTIFY_FROM   approval emails
