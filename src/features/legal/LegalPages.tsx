@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { usePageMeta } from "../../hooks/usePageMeta";
 
 function Page({ title, children }: { title: string; children: React.ReactNode }) {
@@ -13,13 +14,11 @@ function Page({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-const CONTACT = "kalusartem@gmail.com";
-
 function Contact() {
   return (
-    <a href={`mailto:${CONTACT}`} className="underline">
-      {CONTACT}
-    </a>
+    <Link to="/contact" className="underline">
+      contact form
+    </Link>
   );
 }
 
@@ -68,7 +67,7 @@ export function TermsPage() {
       <h2>Changes and contact</h2>
       <p>
         We may update these terms; continuing to use the site means you accept the updated version. Questions
-        or takedown requests: <Contact />.
+        or takedown requests: use the <Contact />.
       </p>
     </Page>
   );
@@ -112,14 +111,14 @@ export function PrivacyPage() {
       <h2>Your choices and retention</h2>
       <p>
         You can hide or delete your listings and saved cars at any time. We keep your data while your account
-        is active. To access, correct or delete your account and data, email <Contact /> from the address you
+        is active. To access, correct or delete your account and data, send us a message through the <Contact /> from the address you
         signed up with and we will act on it. Copies in backups may persist for a short time.
       </p>
       <h2>Children</h2>
       <p>The site is not for anyone under 18, and we do not knowingly collect their data.</p>
       <h2>Changes and contact</h2>
       <p>
-        We will update the date above when this policy changes. Questions: <Contact />.
+        We will update the date above when this policy changes. Questions: use the <Contact />.
       </p>
     </Page>
   );
