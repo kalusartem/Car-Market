@@ -24,6 +24,7 @@ export function SiteFooter() {
           <Link to="/favorites" className="text-muted hover:text-fg">Saved cars</Link>
           <Link to="/terms" className="text-muted hover:text-fg">Terms</Link>
           <Link to="/privacy" className="text-muted hover:text-fg">Privacy</Link>
+          <Link to="/contact" className="text-muted hover:text-fg">Contact us</Link>
         </nav>
       </div>
       <div className="border-t border-line">

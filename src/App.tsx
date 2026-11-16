@@ -19,6 +19,7 @@ import { HomePage } from "./features/listings/pages/HomePage";
 import { ListingsPage } from "./features/listings/pages/ListingsPage";
 import { ListingDetailsPage } from "./features/listings/pages/ListingDetailsPage";
 import { PrivacyPage, TermsPage } from "./features/legal/LegalPages";
+import { ContactPage } from "./features/legal/ContactPage";
 
 const CreateListingPage = lazy(() =>
   import("./features/listings/pages/CreateListingPage").then((m) => ({
@@ -139,6 +140,7 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/contact" element={<ContactPage />} />
 
               <Route path="/sell" element={guard(<CreateListingPage />)} />
               <Route

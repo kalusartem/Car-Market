@@ -21,6 +21,7 @@ import { onRequestGet as carsPage } from "../functions/cars/[[path]]";
 import { onRequestGet as sitemap } from "../functions/sitemap.xml";
 import { onRequestGet as robots } from "../functions/robots.txt";
 import type { Ctx, Env } from "../functions/_lib";
+import { sendContact } from "../functions/_contact";
 import { notifyListingReview } from "../functions/_notify";
 import { connectNode } from "./smtp";
 
@@ -125,6 +126,13 @@ async function route(req: IncomingMessage): Promise<Response> {
     const headers = new Headers();
     if (req.headers.authorization) headers.set("authorization", req.headers.authorization);
     return notifyListingReview(new Request(url, { method, headers, body }), env, connectNode);
+  }
+
+  if (url.pathname === "/api/contact") {
+    if (method !== "POST") return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
+    const body = await readBody(req).catch(() => null);
+    if (!body) return new Response("Payload too large", { status: 413 });
+    return sendContact(new Request(url, { method, body }), env, connectNode);
   }
 
   if (method !== "GET" && method !== "HEAD") {
