@@ -30,7 +30,7 @@ export function SiteFooter() {
       <div className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 md:flex-row md:items-center md:justify-between">
           <p className="max-w-2xl text-xs text-subtle">
-            © {new Date().getFullYear()} Car Market. Vehicle makes, models, VIN decoding and recall data from the
+            © {new Date().getFullYear()} Mokahub LLC. Car Market is operated by Mokahub LLC. Vehicle makes, models, VIN decoding and recall data from the
             U.S. NHTSA. Price checks compare asking prices on this site only.
           </p>
           <div className="flex shrink-0 items-center gap-3 text-sm text-muted">

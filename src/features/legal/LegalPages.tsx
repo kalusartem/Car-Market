@@ -29,8 +29,8 @@ export function TermsPage() {
   return (
     <Page title="Terms of use">
       <p>
-        Car Market lets private sellers advertise used vehicles and lets buyers contact them. It is an
-        independent project. We are not a party to any sale, we do not inspect vehicles, verify sellers, or
+        Car Market is operated by Mokahub LLC (“we”, “us”). It lets private sellers advertise used vehicles
+        and lets buyers contact them. We are not a party to any sale, we do not inspect vehicles, verify sellers, or
         handle payments or transfers of title. By using the site you agree to these terms.
       </p>
       <h2>Your account</h2>
@@ -76,7 +76,10 @@ export function TermsPage() {
 export function PrivacyPage() {
   return (
     <Page title="Privacy policy">
-      <p>This page explains what Car Market collects, why, and who it is shared with.</p>
+      <p>
+        This page explains what Car Market, operated by Mokahub LLC, collects, why, and who it is shared with.
+        Mokahub LLC is the controller of this data.
+      </p>
       <h2>What we store</h2>
       <ul>
         <li>Account details from your sign-in provider (Google, GitHub or email): email address, name and profile picture.</li>
