@@ -9,13 +9,13 @@ internet ──► DuckDNS name ──► your public IP ──► :80/:443 ─�
 
 ## Before you start
 
-1. **Point the DuckDNS name at the right machine.** `car-market.duckdns.org` must resolve to the
+1. **Point your domain at the right machine.** (`car-market.example.com` is a placeholder: use your own hostname everywhere below. The live site runs on Cloudflare Pages, not on this self-hosted setup.) The name must resolve to the
    public IP of the machine running Caddy. If that machine is behind a home router, forward TCP
    80 and 443 to it, and make sure the router's own admin page is *not* answering on those ports
-   from the internet. If it is a cloud VM (for example Oracle), set the DuckDNS IP to the VM's
+   from the internet. If it is a cloud VM (for example Oracle), set the DNS record to the VM's
    public IP and open 80/443 in the cloud firewall (security list / NSG) and in the OS firewall.
-2. If the IP can change, run DuckDNS's updater (cron job from duckdns.org → install) on that machine.
-3. Add `https://car-market.duckdns.org/**` to Supabase → Authentication → URL Configuration.
+2. If the IP can change and you use DuckDNS, run its updater (cron job from duckdns.org → install) on that machine.
+3. Add `https://car-market.example.com/**` to Supabase → Authentication → URL Configuration.
 
 ## Install (Debian/Ubuntu)
 
@@ -41,8 +41,8 @@ sudo systemctl enable --now car-market
 sudo systemctl reload caddy
 ```
 
-Check: `curl -I https://car-market.duckdns.org/` should return 200 with a valid certificate, and
-`curl https://car-market.duckdns.org/robots.txt` should list the sitemap on that hostname.
+Check: `curl -I https://car-market.example.com/` should return 200 with a valid certificate, and
+`curl https://car-market.example.com/robots.txt` should list the sitemap on that hostname.
 
 ## Update
 
