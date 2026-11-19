@@ -4,7 +4,7 @@ A production-style car marketplace built with **React, Supabase, and PostgreSQL*
 
 This project intentionally goes beyond CRUD to demonstrate **senior-level decision making** around architecture, performance, and user experience.
 
-https://car-market-1fq.pages.dev/
+https://car-market-app.pages.dev/
 
 ---
 
