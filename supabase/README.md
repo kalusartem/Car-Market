@@ -9,6 +9,7 @@ Run these files **in order** in the project's SQL editor (Dashboard → SQL Edit
 | `migrations/20261025000000_listing_specs_reports_limits.sql` | Adds VIN/trim/body/drivetrain/colour/title/city/state columns, a unique active VIN index, search indexes, the `listing_reports` table, and per-user rate limits for new listings (10/day) and messages (20/hour). |
 | `migrations/20261026000000_inquiry_sender_and_policy.sql` | Records who sent each message and tightens who may start or reply to a thread. |
 | `migrations/20261027000000_listing_review.sql` | Listing approval: new and edited listings stay `pending` (visible only to the seller and admins) until an admin approves them at `/admin`, and `claim_review_notification` lets `/api/listings/notify` email the admin once per submission. Existing listings are approved. |
+| `migrations/20261125000000_tighten_grants_and_policies.sql` | Replaces the baseline's blanket `grant all` with the privileges the app uses (anon: read-only catalog), drops policies duplicated by the `*_owner_or_admin` ones, and hides photos of pending / rejected listings from everyone but the seller and admins. The `car-images` bucket itself stays public. |
 
 The front end probes for the optional columns and table, so it keeps working before the second file is applied; the extra form fields, filters and the report button appear once it is. Listing review works the same way: until the review file is applied, listings go live immediately.
 
