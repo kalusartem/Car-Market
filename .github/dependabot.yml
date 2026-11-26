@@ -1,0 +1,12 @@
+# Monthly, grouped npm updates: one pull request for minor/patch bumps, majors one at a time.
+# GitHub Actions minutes are limited, so keep this monthly and keep the PR count low.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
