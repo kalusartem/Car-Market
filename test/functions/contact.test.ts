@@ -41,6 +41,14 @@ describe("POST /api/contact", () => {
     expect(msg).toContain("Is the Civic still for sale?");
   });
 
+  it("has no built-in fallback address: without NOTIFY_TO it answers 503 and sends nothing", async () => {
+    const smtp = fakeSmtp();
+    const withoutTo: Env = { ...env, NOTIFY_TO: undefined };
+    const res = await sendContact(post(valid), withoutTo, smtp.connect);
+    expect(res.status).toBe(503);
+    expect(smtp.hosts).toEqual([]);
+  });
+
   it("rejects a too-short message", async () => {
     const smtp = fakeSmtp();
     const res = await sendContact(post({ ...valid, message: "hi" }), env, smtp.connect);

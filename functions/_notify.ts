@@ -56,9 +56,11 @@ export async function notifyListingReview(request: Request, env: Env, connect: C
   // A different subject for resubmits, so Gmail doesn't fold them into the original "new listing" thread.
   const edited =
     !!row.created_at && !!row.submitted_at && new Date(row.submitted_at).getTime() - new Date(row.created_at).getTime() > 60_000;
+  const to = notifyTo(env, "notify");
+  if (!to) return json({ ok: true, sent: false });
   try {
     await sendMail(env, connect, {
-      to: notifyTo(env, "notify"),
+      to,
       subject: `Car Market: ${edited ? "updated listing" : "listing"} waiting for approval — ${title}`,
       text: [
         `A ${title} was ${edited ? "edited and resubmitted" : "submitted"} and is waiting for your approval.`,

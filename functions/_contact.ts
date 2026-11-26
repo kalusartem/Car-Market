@@ -40,9 +40,11 @@ export async function sendContact(request: Request, env: Env, connect: Connect):
       "retry-after": String(limit.retryAfter),
     });
   }
+  const to = notifyTo(env, "contact");
+  if (!to) return json({ error: "The contact form is not available right now." }, 503);
   try {
     await sendMail(env, connect, {
-      to: notifyTo(env, "contact"),
+      to,
       subject: `Car Market contact: ${name || "anonymous"}`,
       text: [`From: ${name || "(no name)"} <${email || "no email given"}>`, "", message].join("\n"),
     });

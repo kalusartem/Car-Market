@@ -141,7 +141,7 @@ New and edited listings wait for an admin's approval (`/admin`, linked from the 
 `POST /api/listings/notify` emails the admin about each one. Set the SMTP settings as Pages secrets
 (`npx wrangler pages secret put SMTP_PASS --project-name <project>`, and the same for the others):
 `SMTP_HOST`, `SMTP_PORT` (465, implicit TLS), `SMTP_USER`, `SMTP_PASS`, `NOTIFY_TO` (who gets the admin and
-contact emails; until it's set they go to a built-in fallback address and a warning is logged) and optional
+contact emails; without it the contact form answers 503 and nothing is sent) and optional
 `NOTIFY_FROM` (a verified sender; defaults to `NOTIFY_TO`).
 Without them the notice is only logged.
 
