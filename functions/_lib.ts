@@ -11,8 +11,9 @@
 // SUPABASE_URL / SUPABASE_ANON_KEY if you prefer separate names. If neither is set,
 // every route falls back to the plain SPA shell.
 
+import type { connect as workersConnect } from "cloudflare:sockets";
 import { escapeHtml } from "../src/lib/listingSeo";
-import type { MailEnv } from "./_mail";
+import { replyParser, type Conn, type Connect, type MailEnv } from "./_mail";
 
 export interface Env extends MailEnv {
   ASSETS: { fetch(input: Request | string | URL): Promise<Response> };
@@ -131,3 +132,30 @@ export async function renderShell(shell: Response, meta: PageMeta, status = 200)
 
 export const staticBody = (inner: string) =>
   `<main style="max-width:48rem;margin:0 auto;padding:1.5rem 1rem;font-family:system-ui,sans-serif;line-height:1.5">${inner}</main>`;
+
+/**
+ * SMTP over a Workers TCP socket (node:tls isn't available on Pages). `connect` is passed in from
+ * "cloudflare:sockets" by the Pages Function, so this file stays importable by the Node server in server/.
+ */
+export function workersSmtpConnect(connect: typeof workersConnect): Connect {
+  return async (host: string, port: number): Promise<Conn> => {
+    const socket = connect({ hostname: host, port }, { secureTransport: "on" });
+    const writer = socket.writable.getWriter();
+    const reader = socket.readable.getReader();
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+    const parse = replyParser();
+    return {
+      write: (s) => writer.write(enc.encode(s)),
+      async reply() {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) throw new Error("SMTP connection closed unexpectedly");
+          const r = parse(dec.decode(value, { stream: true }));
+          if (r) return r;
+        }
+      },
+      close: () => socket.close().catch(() => {}),
+    };
+  };
+}
