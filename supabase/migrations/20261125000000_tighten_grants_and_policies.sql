@@ -27,7 +27,8 @@
 --    The car-images storage bucket is still public: anyone who knows an object path can fetch the file. Paths are
 --    listings/<listing uuid>/..., so they aren't guessable, but making the bucket private needs signed URLs in the app.
 --
--- Run after 20261027000000_listing_review.sql (it needs listings.status). No app change is needed first.
+-- No app change is needed first. Part 3 needs listings.status (20261027000000_listing_review.sql) and is skipped
+-- until that migration is applied; run this file again afterwards.
 -- Idempotent: safe to run again.
 
 begin;
@@ -74,15 +75,26 @@ drop policy if exists car_images_delete_owner on storage.objects;
 
 -- 3. Who can see listing photos --------------------------------------------------
 
-drop policy if exists li_select_all on carmarket.listing_images;
-drop policy if exists li_select_approved_own_or_admin on carmarket.listing_images;
-create policy li_select_approved_own_or_admin on carmarket.listing_images
-  for select using (
-    exists (
-      select 1 from carmarket.listings l
-      where l.id = listing_images.listing_id
-        and (l.status = 'approved' or l.seller_id = auth.uid() or carmarket.is_admin())
-    )
-  );
+-- Only once the review migration (20261027000000) has added listings.status: until then every listing is public, so
+-- every photo is too, and li_select_all stays. (Run this file again after applying that migration.)
+do $do$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'carmarket' and table_name = 'listings' and column_name = 'status') then
+    drop policy if exists li_select_all on carmarket.listing_images;
+    drop policy if exists li_select_approved_own_or_admin on carmarket.listing_images;
+    create policy li_select_approved_own_or_admin on carmarket.listing_images
+      for select using (
+        exists (
+          select 1 from carmarket.listings l
+          where l.id = listing_images.listing_id
+            and (l.status = 'approved' or l.seller_id = auth.uid() or carmarket.is_admin())
+        )
+      );
+  else
+    raise notice 'listings.status is missing: photo visibility left as it was (apply 20261027000000_listing_review.sql, then run this file again)';
+  end if;
+end
+$do$;
 
 commit;
