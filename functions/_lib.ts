@@ -31,6 +31,17 @@ export interface Ctx {
   params: Record<string, string | string[]>;
 }
 
+// Set NOTIFY_TO (Pages secret / server env). The built-in address is a stopgap until it's set everywhere.
+const FALLBACK_NOTIFY_TO = "kalusartem@gmail.com";
+
+/** Where operator emails go: NOTIFY_TO, or the fallback address with a warning in the logs. */
+export function notifyTo(env: Pick<Env, "NOTIFY_TO">, tag: string): string {
+  const to = env.NOTIFY_TO?.trim();
+  if (to) return to;
+  console.warn(`[${tag}] NOTIFY_TO is not set; sending to the built-in fallback address`);
+  return FALLBACK_NOTIFY_TO;
+}
+
 export function supabaseConfig(env: Env) {
   const url = (env.SUPABASE_URL ?? env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
   const key = env.SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY ?? "";

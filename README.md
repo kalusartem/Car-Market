@@ -140,8 +140,9 @@ the `functions/` folder reads the same variables at runtime.
 New and edited listings wait for an admin's approval (`/admin`, linked from the account menu for admins), and
 `POST /api/listings/notify` emails the admin about each one. Set the SMTP settings as Pages secrets
 (`npx wrangler pages secret put SMTP_PASS --project-name <project>`, and the same for the others):
-`SMTP_HOST`, `SMTP_PORT` (465, implicit TLS), `SMTP_USER`, `SMTP_PASS`, plus optional `NOTIFY_TO`
-(defaults to kalusartem@gmail.com) and `NOTIFY_FROM` (a verified sender; defaults to `NOTIFY_TO`).
+`SMTP_HOST`, `SMTP_PORT` (465, implicit TLS), `SMTP_USER`, `SMTP_PASS`, `NOTIFY_TO` (who gets the admin and
+contact emails; until it's set they go to a built-in fallback address and a warning is logged) and optional
+`NOTIFY_FROM` (a verified sender; defaults to `NOTIFY_TO`).
 Without them the notice is only logged.
 
 The app is a client-rendered SPA, so `functions/` returns the same `index.html` with real head tags and a plain-HTML summary for:
