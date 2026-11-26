@@ -145,6 +145,11 @@ contact emails; until it's set they go to a built-in fallback address and a warn
 `NOTIFY_FROM` (a verified sender; defaults to `NOTIFY_TO`).
 Without them the notice is only logged.
 
+`POST /api/contact` (the Contact page) uses the same SMTP settings. It has a honeypot field and a per-IP limit of
+5 send attempts an hour, kept best-effort in the edge cache (`functions/_rateLimit.ts`, no binding needed; per data
+centre, and a no-op on the Node server). `/api/listings/notify` needs the seller's session and mails at most once per
+submission, so it has no IP limit.
+
 The app is a client-rendered SPA, so `functions/` returns the same `index.html` with real head tags and a plain-HTML summary for:
 
 | Route | Function |

@@ -1,14 +1,21 @@
 // POST /api/contact — the Contact page posts {name, email, message}; we email it to the site operator
 // through the same SMTP settings as the listing-review notice (functions/_notify.ts). The operator's address
 // is only ever read server-side (NOTIFY_TO) and never sent to the browser. Without SMTP it is only logged.
+// Each IP gets CONTACT_LIMIT.max send attempts per hour (best effort, see functions/_rateLimit.ts).
 
 import { notifyTo, type Env } from "./_lib";
 import { sendMail, smtpConfigured, type Connect } from "./_mail";
+import { hitRateLimit, type Limit } from "./_rateLimit";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8" } });
+export const CONTACT_LIMIT: Limit = { name: "contact", max: 5, windowMs: 60 * 60 * 1000 };
+
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", ...headers },
+  });
 
 export async function sendContact(request: Request, env: Env, connect: Connect): Promise<Response> {
   const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -25,6 +32,13 @@ export async function sendContact(request: Request, env: Env, connect: Connect):
   if (!smtpConfigured(env)) {
     console.warn("[contact] message received, logged only — SMTP not configured");
     return json({ error: "Contact is not available right now." }, 503);
+  }
+  // Counted before sending, so a failing mail server can't be hammered either.
+  const limit = await hitRateLimit(request, CONTACT_LIMIT);
+  if (!limit.ok) {
+    return json({ error: "Too many messages from this address. Please try again later." }, 429, {
+      "retry-after": String(limit.retryAfter),
+    });
   }
   try {
     await sendMail(env, connect, {
