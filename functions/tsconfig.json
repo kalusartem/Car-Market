@@ -11,5 +11,5 @@
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["./**/*.ts", "../src/lib/listingSeo.ts", "../src/lib/format.ts", "../src/types/car.ts", "../server/**/*.ts"]
+  "include": ["./**/*.ts", "../src/lib/listingSeo.ts", "../src/lib/format.ts", "../src/types/car.ts", "../server/**/*.ts", "../test/functions/**/*.ts"]
 }
