@@ -2,10 +2,9 @@
 // through the same SMTP settings as the listing-review notice (functions/_notify.ts). The operator's address
 // is only ever read server-side (NOTIFY_TO) and never sent to the browser. Without SMTP it is only logged.
 
-import type { Env } from "./_lib";
+import { notifyTo, type Env } from "./_lib";
 import { sendMail, smtpConfigured, type Connect } from "./_mail";
 
-const DEFAULT_NOTIFY_TO = "kalusartem@gmail.com";
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const json = (body: unknown, status = 200) =>
@@ -29,7 +28,7 @@ export async function sendContact(request: Request, env: Env, connect: Connect):
   }
   try {
     await sendMail(env, connect, {
-      to: env.NOTIFY_TO?.trim() || DEFAULT_NOTIFY_TO,
+      to: notifyTo(env, "contact"),
       subject: `Car Market contact: ${name || "anonymous"}`,
       text: [`From: ${name || "(no name)"} <${email || "no email given"}>`, "", message].join("\n"),
     });

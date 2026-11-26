@@ -7,10 +7,9 @@
 
 import type { Listing } from "../src/types/car";
 import { formatMileage, formatPrice, listingTitle } from "../src/lib/format";
-import { supabaseConfig, type Env } from "./_lib";
+import { notifyTo, supabaseConfig, type Env } from "./_lib";
 import { sendMail, smtpConfigured, type Connect } from "./_mail";
 
-const DEFAULT_NOTIFY_TO = "kalusartem@gmail.com";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ClaimedListing = Listing & { submitted_at: string | null };
@@ -59,7 +58,7 @@ export async function notifyListingReview(request: Request, env: Env, connect: C
     !!row.created_at && !!row.submitted_at && new Date(row.submitted_at).getTime() - new Date(row.created_at).getTime() > 60_000;
   try {
     await sendMail(env, connect, {
-      to: env.NOTIFY_TO?.trim() || DEFAULT_NOTIFY_TO,
+      to: notifyTo(env, "notify"),
       subject: `Car Market: ${edited ? "updated listing" : "listing"} waiting for approval — ${title}`,
       text: [
         `A ${title} was ${edited ? "edited and resubmitted" : "submitted"} and is waiting for your approval.`,
