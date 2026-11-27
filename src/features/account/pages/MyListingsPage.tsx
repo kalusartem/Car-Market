@@ -54,6 +54,17 @@ async function deleteListing(listing: MyListing) {
 export function MyListingsPage() {
   const { data: user, isLoading: authLoading } = useAuthUser();
   const qc = useQueryClient();
+  const toggleHidden = useMutation({
+    // Hiding or unhiding only flips is_active; the review trigger leaves status alone for that.
+    mutationFn: async (l: MyListing) => {
+      const { error } = await supabase.from("listings").update({ is_active: !l.is_active }).eq("id", l.id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["my-listings"] });
+      await qc.invalidateQueries({ queryKey: ["listings"] });
+    },
+  });
   const remove = useMutation({
     mutationFn: deleteListing,
     onSuccess: async () => {
@@ -112,9 +123,9 @@ export function MyListingsPage() {
         </PageMessage>
       ) : (
         <>
-        {remove.isError ? (
+        {remove.isError || toggleHidden.isError ? (
           <p role="alert" className="mt-4 text-sm text-danger">
-            {errorMessage(remove.error, "Could not delete the listing.")}
+            {remove.isError ? errorMessage(remove.error, "Could not delete the listing.") : errorMessage(toggleHidden.error, "Could not update the listing.")}
           </p>
         ) : null}
         <ul className="mt-6 grid gap-3">
@@ -150,6 +161,11 @@ export function MyListingsPage() {
                 <Link to={`/listings/${l.id}/edit`} className="btn-secondary">
                   Edit
                 </Link>
+                {(l.status ?? "approved") === "approved" ? (
+                  <button type="button" className="btn-secondary" disabled={toggleHidden.isPending} onClick={() => toggleHidden.mutate(l)}>
+                    {l.is_active ? "Hide" : "Unhide"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn-secondary text-danger"
