@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "../../../lib/supabase";
 import { useAuthUser } from "../../../lib/auth";
@@ -42,8 +42,25 @@ function Cover({ listing }: { listing: MyListing }) {
   );
 }
 
+/** Removes the photos from storage (best effort), then the listing; the database deletes its photo rows and saved/inquiry links with it. */
+async function deleteListing(listing: MyListing) {
+  const byBucket = new Map<string, string[]>();
+  for (const img of listing.listing_images ?? []) byBucket.set(img.bucket, [...(byBucket.get(img.bucket) ?? []), img.path]);
+  for (const [bucket, paths] of byBucket) await supabase.storage.from(bucket).remove(paths).catch(() => undefined);
+  const { error } = await supabase.from("listings").delete().eq("id", listing.id);
+  if (error) throw error;
+}
+
 export function MyListingsPage() {
   const { data: user, isLoading: authLoading } = useAuthUser();
+  const qc = useQueryClient();
+  const remove = useMutation({
+    mutationFn: deleteListing,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["my-listings"] });
+      await qc.invalidateQueries({ queryKey: ["listings"] });
+    },
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["my-listings", user?.id],
@@ -94,6 +111,12 @@ export function MyListingsPage() {
           </Link>
         </PageMessage>
       ) : (
+        <>
+        {remove.isError ? (
+          <p role="alert" className="mt-4 text-sm text-danger">
+            {errorMessage(remove.error, "Could not delete the listing.")}
+          </p>
+        ) : null}
         <ul className="mt-6 grid gap-3">
           {data.map((l) => (
             <li key={l.id} className="card flex items-center gap-4 p-3 sm:p-4">
@@ -127,10 +150,21 @@ export function MyListingsPage() {
                 <Link to={`/listings/${l.id}/edit`} className="btn-secondary">
                   Edit
                 </Link>
+                <button
+                  type="button"
+                  className="btn-secondary text-danger"
+                  disabled={remove.isPending}
+                  onClick={() => {
+                    if (window.confirm(`Delete the ${l.year} ${l.make} ${l.model} listing and its photos? This cannot be undone.`)) remove.mutate(l);
+                  }}
+                >
+                  Delete
+                </button>
               </div>
             </li>
           ))}
         </ul>
+        </>
       )}
     </main>
   );
